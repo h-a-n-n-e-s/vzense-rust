@@ -6,7 +6,7 @@ use vzense_rust::{
     color_map::TURBO,
     device::{get_measuring_range, init},
     frame::{
-        get_depth_u8, get_frame, get_optical_rgb, read_next_frame, Frame, FrameReady, FrameType,
+        get_depth_mono, get_frame, get_optical_rgb, read_next_frame, Frame, FrameReady, FrameType,
     },
     touch_detector::TouchDetector,
     util::new_fixed_vec,
@@ -18,18 +18,16 @@ const RUN_TOUCH_DETECTOR: bool = true;
 #[show_image::main]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     //
-    let device_handle = match init() {
-        Ok(h) => h,
+    let device = match init() {
+        Ok(d) => d,
         Err(msg) => {
             println!("{}", msg);
             return Ok(());
         }
     };
 
-    let measuring_range = get_measuring_range(device_handle);
-    let min_depth = measuring_range.effectDepthMinNear;
-    let max_depth = measuring_range.effectDepthMaxNear;
-
+    let (min_depth, max_depth) = get_measuring_range(device);
+    
     println!("depth range: {} mm to {} mm", min_depth, max_depth);
     println!("{}", usize::MAX);
     let optical_window = create_window("optical", Default::default())?;
@@ -50,11 +48,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut now = Instant::now();
 
     loop {
-        read_next_frame(device_handle, frame_ready);
+        read_next_frame(device, frame_ready);
 
         // depth //////////////////////////////////////////
 
-        get_frame(device_handle, frame_ready, FrameType::Depth, frame);
+        get_frame(device, frame_ready, FrameType::Depth, frame);
 
         if init {
             init = false;
@@ -81,7 +79,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if count < touch_detector.baseline_sample_size || !RUN_TOUCH_DETECTOR {
             // standard depth output
-            get_depth_u8(frame, min_depth, max_depth, signal);
+            get_depth_mono(frame, min_depth, max_depth, signal);
 
             // apply color map
             for (i, v) in signal.iter().enumerate() {
@@ -97,7 +95,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // optical ////////////////////////////////////////
 
-        get_frame(device_handle, frame_ready, FrameType::Optical, frame);
+        get_frame(device, frame_ready, FrameType::Optical, frame);
 
         get_optical_rgb(frame, rgb);
 

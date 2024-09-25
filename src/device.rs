@@ -4,7 +4,11 @@ use std::{ffi::CStr, thread::sleep, time::Duration};
 use sys::PsReturnStatus_PsRetOK as ok;
 use vzense_sys as sys;
 
-pub fn init() -> Result<sys::PsDeviceHandle, String> {
+/// Device to connect to.
+pub type Device = sys::PsDeviceHandle;
+
+/// Initializes the sytem and returns a device if it finds one.
+pub fn init() -> Result<Device, String> {
     unsafe {
         println!("initializing...");
         let mut status = sys::Ps2_Initialize();
@@ -38,13 +42,13 @@ pub fn init() -> Result<sys::PsDeviceHandle, String> {
         let uri = device_info.uri.as_ptr();
         println!("uri: {}", CStr::from_ptr(uri).to_str().unwrap());
 
-        let device_handle = &mut (0 as sys::PsDeviceHandle);
-        status = sys::Ps2_OpenDevice(uri, device_handle);
+        let device = &mut (0 as sys::PsDeviceHandle);
+        status = sys::Ps2_OpenDevice(uri, device);
         if status != ok {
             return Err(format!("open device failed with status {}", status));
         }
 
-        status = sys::Ps2_StartStream(*device_handle, SESSION_INDEX);
+        status = sys::Ps2_StartStream(*device, SESSION_INDEX);
         if status != ok {
             return Err(format!("start stream failed with status {}", status));
         } else {
@@ -52,27 +56,29 @@ pub fn init() -> Result<sys::PsDeviceHandle, String> {
         }
 
         let data_mode = &mut sys::PsDataMode::default();
-        status = sys::Ps2_GetDataMode(*device_handle, SESSION_INDEX, data_mode);
+        status = sys::Ps2_GetDataMode(*device, SESSION_INDEX, data_mode);
         if status != ok {
             return Err(format!("get data mode failed with status {}", status));
         } else {
             println!("data mode: {}", *data_mode);
         }
 
-        Ok(*device_handle)
+        Ok(*device)
     }
 }
 
-pub fn get_measuring_range(device_handle: sys::PsDeviceHandle) -> sys::PsMeasuringRange {
+/// Returns the current depth range `(min, max)` of the camera in mm 
+pub fn get_measuring_range(device: Device) -> (u16, u16) {
     unsafe {
         let depth_range = &mut sys::PsDepthRange::default();
 
-        sys::Ps2_GetDepthRange(device_handle, SESSION_INDEX, depth_range);
+        sys::Ps2_GetDepthRange(device, SESSION_INDEX, depth_range);
 
         let measuring_range = &mut sys::PsMeasuringRange::default();
 
-        sys::Ps2_GetMeasuringRange(device_handle, SESSION_INDEX, *depth_range, measuring_range);
+        sys::Ps2_GetMeasuringRange(device, SESSION_INDEX, *depth_range, measuring_range);
 
-        *measuring_range
+        // so far only returning range for the default depth range 'near'
+        (measuring_range.effectDepthMinNear, measuring_range.effectDepthMaxNear)
     }
 }

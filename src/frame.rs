@@ -1,8 +1,11 @@
-use crate::SESSION_INDEX;
+use crate::{device::Device, SESSION_INDEX};
 
 use vzense_sys as sys;
 
+/// Flag signaling if a frame is available
 pub type FrameReady = sys::PsFrameReady;
+
+/// Depth/IR/RGB image frame data.
 pub type Frame = sys::PsFrame;
 
 pub enum FrameType {
@@ -10,27 +13,26 @@ pub enum FrameType {
     Optical,
 }
 
-pub fn read_next_frame(device_handle: sys::PsDeviceHandle, frame_ready: &mut sys::PsFrameReady) {
+/// Captures the next image frame from `device`. This API must be invoked before capturing frame data using `get_frame()`. `frame_ready` is a pointer to a buffer storing the signal for the frame availability.
+pub fn read_next_frame(device: Device, frame_ready: &mut FrameReady) {
     unsafe {
-        sys::Ps2_ReadNextFrame(device_handle, SESSION_INDEX, frame_ready);
-        // if status != ok {
-        //     panic!("read next frame failed with status {}", status);
-        // }
+        sys::Ps2_ReadNextFrame(device, SESSION_INDEX, frame_ready);
     }
 }
 
+/// Returns the image data in `frame` for the current frame from the device specified by `device`. Before invoking this API, invoke `read_next_frame()` to capture one image frame from the device. `frame_ready` is a pointer to a buffer storing the signal for the frame availability set in `read_next_frame()`. The image `frame_type` is either `FrameType::Depth` or `FrameType::Optical`.
 pub fn get_frame(
-    device_handle: sys::PsDeviceHandle,
-    frame_ready: &sys::PsFrameReady,
+    device: Device,
+    frame_ready: &FrameReady,
     frame_type: FrameType,
-    frame: &mut sys::PsFrame,
+    frame: &mut Frame,
 ) {
     unsafe {
         match frame_type {
             FrameType::Depth => {
                 if frame_ready.depth() == 1 {
                     sys::Ps2_GetFrame(
-                        device_handle,
+                        device,
                         SESSION_INDEX,
                         sys::PsFrameType_PsDepthFrame,
                         frame,
@@ -40,7 +42,7 @@ pub fn get_frame(
             FrameType::Optical => {
                 if frame_ready.rgb() == 1 {
                     sys::Ps2_GetFrame(
-                        device_handle,
+                        device,
                         SESSION_INDEX,
                         sys::PsFrameType_PsRGBFrame,
                         frame,
@@ -51,7 +53,8 @@ pub fn get_frame(
     }
 }
 
-pub fn get_depth_u8(frame: &sys::PsFrame, min_depth: u16, max_depth: u16, out: &mut [u8]) {
+/// Creates depth data array `out` from `frame`.
+pub fn get_depth_mono(frame: &sys::PsFrame, min_depth: u16, max_depth: u16, out: &mut [u8]) {
     unsafe {
         let p = std::ptr::slice_from_raw_parts(frame.pFrameData, frame.dataLen as usize)
             .as_ref()
@@ -68,6 +71,7 @@ pub fn get_depth_u8(frame: &sys::PsFrame, min_depth: u16, max_depth: u16, out: &
     }
 }
 
+/// Creates optical data array `out` from `frame`.
 pub fn get_optical_rgb(frame: &sys::PsFrame, out: &mut [u8]) {
     unsafe {
         let p = std::ptr::slice_from_raw_parts(frame.pFrameData, frame.dataLen as usize)

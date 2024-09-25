@@ -22,6 +22,7 @@ pub struct TouchDetector {
     ring_buffer: Vec<u16>,
 }
 impl TouchDetector {
+    /// Create a new instance with the specified parameters.
     pub fn new(
         min_depth: u16,
         max_depth: u16,
