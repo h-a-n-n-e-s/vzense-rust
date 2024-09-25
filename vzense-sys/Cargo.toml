@@ -1,0 +1,9 @@
+[package]
+name = "vzense-sys"
+version = "0.1.0"
+edition = "2021"
+description = "Rust abstraction layer for the Vzense SDK C library"
+authors = ["Johannes Schoenke"]
+
+[build-dependencies]
+bindgen = "0.70.1"

@@ -1,0 +1,13 @@
+[package]
+name = "vzense-rust"
+version = "0.1.0"
+edition = "2021"
+description = "high-level library for Vzense cameras"
+categories = ["external-ffi-bindings", "computer-vision", "hardware-support"]
+authors = ["Johannes Schoenke"]
+
+[dependencies]
+vzense-sys = { version = "0.1.0", path = "vzense-sys" }
+
+[dev-dependencies]
+show-image = "0.14.0"
