@@ -17,4 +17,4 @@ fn main() {
 
     // tell rustc to link the shared library
     println!("cargo:rustc-link-lib=vzense_api");
-  }
+}
