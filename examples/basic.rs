@@ -1,4 +1,6 @@
-//! This example covers all the functionality provided by the library. It connects to a device, starts a stream, and displays the received data.
+/*!
+This example covers all the functionality provided by the library. It connects to a device, starts a stream, and displays the received data. The `touch_detector` is a very simple example of image processing, using depth data to detect touch events.
+*/
 use std::{io::Write, time::Instant};
 
 use show_image::{create_window, ImageInfo, ImageView, WindowOptions, WindowProxy};
