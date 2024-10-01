@@ -1,8 +1,8 @@
 [package]
 name = "vzense-rust"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
-description = "high-level library for Vzense cameras"
+description = "High-level library for Vzense cameras"
 categories = ["external-ffi-bindings", "computer-vision", "hardware-support"]
 repository = "https://github.com/h-a-n-n-e-s/vzense-rust"
 readme = "README.md"
@@ -14,3 +14,9 @@ vzense-sys = { version = "0.1.0", path = "vzense-sys" }
 
 [dev-dependencies]
 show-image = "0.14.0"
+
+[features]
+# uses the already created bindings in vzense-sys/bindings
+default = []
+# recreates the bindings for vzense-sys
+run-bindgen = ["vzense-sys/run-bindgen"]

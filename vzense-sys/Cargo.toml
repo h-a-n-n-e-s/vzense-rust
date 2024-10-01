@@ -1,6 +1,6 @@
 [package]
 name = "vzense-sys"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Rust abstraction layer for the Vzense SDK C library"
 repository = "https://github.com/h-a-n-n-e-s/vzense-rust/vzense-sys"
@@ -9,4 +9,10 @@ license = "MIT"
 authors = ["Johannes Schoenke"]
 
 [build-dependencies]
-bindgen = "0.70.1"
+bindgen = {version = "0.70.1", optional = true}
+
+[features]
+# uses the already created bindings
+default = []
+# recreates the bindings
+run-bindgen = ["bindgen"]
