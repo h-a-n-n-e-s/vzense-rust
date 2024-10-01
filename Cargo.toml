@@ -5,6 +5,8 @@ edition = "2021"
 description = "high-level library for Vzense cameras"
 categories = ["external-ffi-bindings", "computer-vision", "hardware-support"]
 repository = "https://github.com/h-a-n-n-e-s/vzense-rust"
+readme = "README.md"
+license = "MIT"
 authors = ["Johannes Schoenke"]
 
 [dependencies]
