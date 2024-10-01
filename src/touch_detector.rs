@@ -1,13 +1,19 @@
+//! A simple touch detector based on depth data.
+
 use std::iter::zip;
 
 use crate::{device::DEFAULT_RESOLUTION, frame::Frame, util::new_fixed_vec};
 
 /**
-### A touch detector based on depth data.
+### A simple touch detector based on depth data.
+
+The touch detector uses depth data to calculate the difference between the current depth and an initially recorded baseline depth. If this difference is between `min_touch` and `max_touch` a touch is assumed.
+
 * `min_depth` and `max_depth` are the measuring ranges of the depth camera.
 * `min_touch` is the minimum height in mm above the surface considered to be a touch. If this parameter is too small, noise will lead to a lot of false detections.
 * `max_touch` is the maximum height in mm above the surface considered to be a touch.
-* First an average baseline depth is computed using the first `baseline_sample_size` frames. The current depth is estimated by a moving average of `sample_size` frames.
+
+First an average baseline depth is computed using the first `baseline_sample_size` frames. The current depth is estimated by a moving average of `sample_size` frames.
 */
 pub struct TouchDetector {
     min_depth: u16,
@@ -24,7 +30,7 @@ pub struct TouchDetector {
     ring_buffer: Vec<u16>,
 }
 impl TouchDetector {
-    /// Create a new instance with the specified parameters. All length parameters are in mm.
+    /// Creates a new instance with the specified parameters. All length parameters are in mm.
     pub fn new(
         min_depth: u16,
         max_depth: u16,
@@ -50,7 +56,7 @@ impl TouchDetector {
         }
     }
 
-    /// Processing one input `frame` resulting in a touch signal (255 for 'touch', 0 otherwise) stored in `touch_signal`.
+    /// Processes one input `frame` resulting in a `touch_signal` (255 for 'touch', 0 otherwise).
     pub fn process(&mut self, frame: &Frame, touch_signal: &mut [u8]) {
         unsafe {
             let p = std::ptr::slice_from_raw_parts(frame.pFrameData, frame.dataLen as usize)

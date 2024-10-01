@@ -1,3 +1,5 @@
+//! Reading frames, creating data arrays.
+
 use std::iter::zip;
 
 use crate::{device::Device, SESSION_INDEX};
@@ -10,8 +12,11 @@ pub type FrameReady = sys::PsFrameReady;
 /// Depth/IR/RGB image frame data.
 pub type Frame = sys::PsFrame;
 
+/// The available frame types, `Depth` and `RGB` (optical). IR frame is not implemented yet.
 pub enum FrameType {
+    /// depth
     Depth,
+    /// optical
     RGB,
 }
 
@@ -81,6 +86,7 @@ pub fn get_bgr(frame: &Frame, bgr: &mut [u8]) {
     }
 }
 
+/// Checks if the number of pixels in `frame` equals `pixel_count`.
 pub fn check_pixel_count(frame: &Frame, pixel_count: usize) {
     let w = frame.width as usize;
     let h = frame.height as usize;

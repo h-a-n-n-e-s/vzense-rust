@@ -1,3 +1,6 @@
+#![doc = include_str!("../README.md")]
+// #![warn(missing_docs)]
+
 const SESSION_INDEX: u32 = 0;
 
 pub mod color_map;

@@ -1,4 +1,10 @@
-use std::{sync::{atomic::{AtomicBool, Ordering}, Arc}, thread::JoinHandle};
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    thread::JoinHandle,
+};
 
 /// Creates a new vector of length `size` with capacity set to `size` and initializes it with `init`.
 pub fn new_fixed_vec<T: Clone>(size: usize, init: T) -> Vec<T> {
@@ -13,6 +19,7 @@ pub struct KeyboardEvent {
     thread: JoinHandle<()>,
 }
 impl KeyboardEvent {
+    /// Create a new Event for the keystroke `key`.
     pub fn new(key: &str) -> Self {
         let pressed = Arc::new(AtomicBool::new(false));
         let pressed_cl = pressed.clone();
@@ -27,16 +34,15 @@ impl KeyboardEvent {
                 pressed_cl.store(true, Ordering::Relaxed);
             }
         });
-        Self {
-            pressed,
-            thread
-        }
+        Self { pressed, thread }
     }
 
+    /// Check if a key was pressed.
     pub fn key_was_pressed(&self) -> bool {
         self.pressed.load(Ordering::Relaxed)
     }
 
+    /// Join with the main thread.
     pub fn join(self) {
         self.thread.join().unwrap();
     }

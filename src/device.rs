@@ -1,3 +1,5 @@
+//! Basic routines to initialize or shut down a device.
+
 use crate::SESSION_INDEX;
 
 use std::{ffi::CStr, thread::sleep, time::Duration};
@@ -7,6 +9,7 @@ use vzense_sys as sys;
 /// Device to connect to.
 pub type Device = sys::PsDeviceHandle;
 
+/// Possible RGB resolutions.
 pub enum RGBResolution {
     RGBRes640x480,
     RGBRes800x600,
@@ -38,7 +41,7 @@ impl Resolution {
 /// For the Depth and IR frames, the resolution is fixed to 640x480 for all data modes. The rgb frame can be set to higher resolutions using `set_rgb_resolution()`, but the defaults is also 640x480.
 pub const DEFAULT_RESOLUTION: Resolution = Resolution::new(640, 480);
 
-/// Initializes the sytem and returns a device if it finds one.
+/// Initializes the sytem and returns a device if it finds one. Make sure a Vzense camera is connected. After 10 seconds the routine will time out if no device was found.
 pub fn init() -> Result<Device, String> {
     unsafe {
         println!("initializing...");
@@ -98,7 +101,7 @@ pub fn init() -> Result<Device, String> {
     }
 }
 
-/// Sets the resolution of the rgb frame
+/// Sets the resolution of the rgb frame. Three resolutions are currently available: 640x480, 800x600, and 1600x1200.
 pub fn set_rgb_resolution(device: Device, resolution: RGBResolution) {
     let resolution = match resolution {
         RGBResolution::RGBRes640x480 => sys::PsResolution_PsRGB_Resolution_640_480,
@@ -149,7 +152,7 @@ pub fn shut_down(device: &mut Device) {
     unsafe {
         sys::Ps2_StopStream(*device, SESSION_INDEX);
         sys::Ps2_CloseDevice(device);
-        
+
         let status = sys::Ps2_Shutdown();
         if status != ok {
             println!("shut down failed with status: {}", status);

@@ -1,3 +1,4 @@
+//! This example covers all the functionality provided by the library. It connects to a device, starts a stream, and displays the received data.
 use std::{io::Write, time::Instant};
 
 use show_image::{create_window, ImageInfo, ImageView, WindowOptions, WindowProxy};
@@ -5,7 +6,8 @@ use show_image::{create_window, ImageInfo, ImageView, WindowOptions, WindowProxy
 use vzense_rust::{
     color_map::TURBO,
     device::{
-        get_measuring_range, get_rgb_resolution, init, set_rgb_resolution, shut_down, RGBResolution, Resolution, DEFAULT_RESOLUTION
+        get_measuring_range, get_rgb_resolution, init, set_rgb_resolution, shut_down,
+        RGBResolution, Resolution, DEFAULT_RESOLUTION,
     },
     frame::{
         check_pixel_count, get_bgr, get_frame, get_normalized_depth, read_next_frame, Frame,
@@ -18,6 +20,7 @@ use vzense_rust::{
 #[show_image::main]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     //
+    // Looking for a device. If a device has been found, it will be opened and a stream started.
     let mut device = match init() {
         Ok(d) => d,
         Err(msg) => {
@@ -33,6 +36,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let frame_ready = &mut FrameReady::default();
     let frame = &mut Frame::default();
 
+    // Setting the rgb resolution. If not set the default will be 640x480.
     set_rgb_resolution(device, RGBResolution::RGBRes1600x1200);
     let rgb_resolution = get_rgb_resolution(device);
 
@@ -58,6 +62,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut now = Instant::now();
     let mut init = true;
 
+    // main loop reading frames and displaying them
     loop {
         read_next_frame(device, frame_ready);
 
@@ -117,12 +122,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     shut_down(&mut device);
 
-    // rgb_window.run_function(|w| {
-    //     w.destroy();
-    // });
-
     Ok(())
-
 }
 
 enum Format {
@@ -140,3 +140,9 @@ fn update_window(window: &WindowProxy, resolution: &Resolution, data: &[u8], for
     let image = ImageView::new(info, data);
     window.set_image("image", image).unwrap();
 }
+
+// fn _destroy_window(window: &WindowProxy) {
+//     window.run_function(|w| {
+//         w.destroy();
+//     });
+// }
