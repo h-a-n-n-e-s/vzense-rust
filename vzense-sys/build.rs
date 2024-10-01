@@ -4,7 +4,7 @@ fn main() {
     #[cfg(feature = "run-bindgen")] {
         let bindings = bindgen::Builder::default()
             // The input header we would like to generate bindings for.
-            .header("vzense/include/Vzense_api_560.h")
+            .header("include/Vzense_api_560.h")
             // derive defaults if possible
             .derive_default(true)
             // Tell cargo to invalidate the built crate whenever any of the
