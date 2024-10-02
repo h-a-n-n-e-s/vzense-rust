@@ -14,7 +14,7 @@ Currently only the Vzense DCAM560 is supported (the only one that could be teste
 
 The [basic](examples/basic.rs) example covers all the functionality provided by the library and can be run with `cargo run --example basic`. To stream with maximum frame rate add `--release`. The [`show-image`](https://docs.rs/show-image/latest/show_image) crate is necessary to display the data.  
 
-If an executable is used on a machine it was not built on, make sure it can find the shared libraries stored in `./vzense-lib/`.
+If an executable is used on a machine it was not built on, make sure it can find the shared libraries in `vzense-lib/`.
 
 ## Contributing
 
