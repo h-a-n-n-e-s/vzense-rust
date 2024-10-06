@@ -42,8 +42,17 @@ pub fn get_frame(
                 }
             }
             FrameType::RGB => {
+                // check if rgb is mapped to depth
+                let is_mapped = &mut 0;
+                sys::Ps2_GetMapperEnabledDepthToRGB(device, SESSION_INDEX, is_mapped);
+
+                let rgb_frame_type = match *is_mapped {
+                    0 => sys::PsFrameType_PsRGBFrame,
+                    _ => sys::PsFrameType_PsMappedRGBFrame,
+                };
+
                 if frame_ready.rgb() == 1 {
-                    sys::Ps2_GetFrame(device, SESSION_INDEX, sys::PsFrameType_PsRGBFrame, frame);
+                    sys::Ps2_GetFrame(device, SESSION_INDEX, rgb_frame_type, frame);
                 }
             }
         }

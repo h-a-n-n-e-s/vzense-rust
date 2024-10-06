@@ -8,8 +8,8 @@ use show_image::{create_window, ImageInfo, ImageView, WindowOptions, WindowProxy
 use vzense_rust::{
     color_map::TURBO,
     device::{
-        get_measuring_range, get_rgb_resolution, init, set_rgb_resolution, shut_down,
-        RGBResolution, Resolution, DEFAULT_RESOLUTION,
+        get_measuring_range, get_rgb_resolution, init, set_mapper_depth_to_rgb, set_rgb_resolution,
+        shut_down, RGBResolution, Resolution, DEFAULT_RESOLUTION,
     },
     frame::{
         check_pixel_count, get_bgr, get_frame, get_normalized_depth, read_next_frame, Frame,
@@ -38,7 +38,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let frame_ready = &mut FrameReady::default();
     let frame = &mut Frame::default();
 
+    // If mapper is set to true it resets rgb_resolution to 640x480.
+    set_mapper_depth_to_rgb(device, true);
+
     // Setting the rgb resolution. If not set the default will be 640x480.
+    // If mapper is set to true, resolution setting will be ignored and reverted to 640x480.
     set_rgb_resolution(device, RGBResolution::RGBRes1600x1200);
     let rgb_resolution = get_rgb_resolution(device);
 

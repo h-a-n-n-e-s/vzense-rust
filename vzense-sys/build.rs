@@ -1,7 +1,6 @@
-
 fn main() {
-
-    #[cfg(feature = "run-bindgen")] {
+    #[cfg(feature = "run-bindgen")]
+    {
         let bindings = bindgen::Builder::default()
             // The input header we would like to generate bindings for.
             .header("include/Vzense_api_560.h")

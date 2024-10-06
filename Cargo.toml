@@ -1,6 +1,6 @@
 [package]
 name = "vzense-rust"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2021"
 description = "High-level library for Vzense cameras"
 categories = ["external-ffi-bindings", "computer-vision", "hardware-support"]
@@ -10,7 +10,7 @@ license = "MIT"
 authors = ["Johannes Schoenke"]
 
 [dependencies]
-vzense-sys = { version = "0.1.3", path = "vzense-sys" }
+vzense-sys = { path = "vzense-sys" }
 
 [dev-dependencies]
 show-image = "0.14.0"
