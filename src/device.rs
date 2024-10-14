@@ -42,6 +42,13 @@ impl Resolution {
 /// For the Depth and IR frames, the resolution is fixed to 640x480 for all data modes. The rgb frame can be set to higher resolutions using `set_rgb_resolution()`, but the defaults is also 640x480.
 pub const DEFAULT_RESOLUTION: Resolution = Resolution::new(640, 480);
 
+/// Possible depth ranges.
+pub enum DepthRange {
+    Near,
+    Mid,
+    Far,
+}
+
 /// Initializes the sytem and returns a device if it finds one. Make sure a Vzense camera is connected. After 10 seconds the routine will time out if no device was found.
 pub fn init() -> Result<Device, String> {
     unsafe {
@@ -140,32 +147,44 @@ pub fn get_rgb_resolution(device: Device) -> Resolution {
     let resolution_type = &mut 0;
     unsafe {
         sys::Ps2_GetRGBResolution(device, SESSION_INDEX, resolution_type);
-
-        match *resolution_type {
-            2 => Resolution::new(640, 480),
-            5 => Resolution::new(800, 600),
-            4 => Resolution::new(1600, 1200),
-            _ => panic!("unknown rgb resolution"),
-        }
+    }
+    match *resolution_type {
+        2 => Resolution::new(640, 480),
+        5 => Resolution::new(800, 600),
+        4 => Resolution::new(1600, 1200),
+        _ => panic!("unknown rgb resolution"),
     }
 }
 
-/// Returns the current depth range `(min, max)` of the camera in mm
+/// Sets the depth range mode.
+pub fn set_depth_rannge(device: Device, depth_range: DepthRange) {
+    let depth_range = match depth_range {
+        DepthRange::Near => 0,
+        DepthRange::Mid => 1,
+        DepthRange::Far => 2,
+    };
+    unsafe {
+        sys::Ps2_SetDepthRange(device, SESSION_INDEX, depth_range);
+    }
+}
+
+/// Returns the current measuring range `(min, max)` of the camera in mm
 pub fn get_measuring_range(device: Device) -> (u16, u16) {
     unsafe {
         let depth_range = &mut sys::PsDepthRange::default();
 
         sys::Ps2_GetDepthRange(device, SESSION_INDEX, depth_range);
 
-        let measuring_range = &mut sys::PsMeasuringRange::default();
+        let mr = &mut sys::PsMeasuringRange::default();
 
-        sys::Ps2_GetMeasuringRange(device, SESSION_INDEX, *depth_range, measuring_range);
+        sys::Ps2_GetMeasuringRange(device, SESSION_INDEX, *depth_range, mr);
 
-        // so far only returning range for the default depth range 'near'
-        (
-            measuring_range.effectDepthMinNear,
-            measuring_range.effectDepthMaxNear,
-        )
+        match *depth_range {
+            0 => (mr.effectDepthMinNear, mr.effectDepthMaxNear),
+            1 => (mr.effectDepthMinMid, mr.effectDepthMaxMid),
+            2 => (mr.effectDepthMinFar, mr.effectDepthMaxFar),
+            _ => panic!("unknown measuring range"),
+        }
     }
 }
 

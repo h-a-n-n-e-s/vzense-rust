@@ -8,8 +8,8 @@ use show_image::{create_window, ImageInfo, ImageView, WindowOptions, WindowProxy
 use vzense_rust::{
     color_map::TURBO,
     device::{
-        get_measuring_range, get_rgb_resolution, init, set_mapper_depth_to_rgb, set_rgb_resolution,
-        shut_down, RGBResolution, Resolution, DEFAULT_RESOLUTION,
+        get_measuring_range, get_rgb_resolution, init, set_depth_rannge, set_mapper_depth_to_rgb,
+        set_rgb_resolution, shut_down, DepthRange, RGBResolution, Resolution, DEFAULT_RESOLUTION,
     },
     frame::{
         check_pixel_count, get_bgr, get_frame, get_normalized_depth, read_next_frame, Frame,
@@ -31,9 +31,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    let (min_depth, max_depth) = get_measuring_range(device);
+    // choosing the depth range (Near, Mid, or Far)
+    set_depth_rannge(device, DepthRange::Mid);
 
-    println!("depth range: {} mm to {} mm", min_depth, max_depth);
+    let (min_depth, max_depth) = get_measuring_range(device);
+    println!("measuring range: {} mm to {} mm", min_depth, max_depth);
 
     let frame_ready = &mut FrameReady::default();
     let frame = &mut Frame::default();
