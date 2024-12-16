@@ -8,4 +8,10 @@ Generates and uses Vzense C library bindings as a Rust crate. This crate is used
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 
-include!("../bindings/bindings.rs");
+pub mod dcam560 {
+    include!("../bindings/dcam560.rs");
+}
+
+pub mod nyx650 {
+    include!("../bindings/nyx650.rs");
+}
