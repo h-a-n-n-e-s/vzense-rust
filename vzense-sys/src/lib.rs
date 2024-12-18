@@ -12,6 +12,6 @@ pub mod dcam560 {
     include!("../bindings/dcam560.rs");
 }
 
-pub mod nyx650 {
-    include!("../bindings/nyx650.rs");
+pub mod scepter {
+    include!("../bindings/scepter.rs");
 }

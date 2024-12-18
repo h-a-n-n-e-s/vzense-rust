@@ -2,7 +2,6 @@
 // #![warn(missing_docs)]
 
 pub mod dcam560;
-pub mod nyx650;
+pub mod scepter;
 
-pub mod color_map;
 pub mod util;

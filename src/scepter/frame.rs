@@ -2,17 +2,25 @@
 
 use std::iter::zip;
 
-use crate::SESSION_INDEX;
-
 use super::device::Device;
 
-use vzense_sys::dcam560 as sys;
+use vzense_sys::scepter as sys;
 
 /// Flag signaling if a frame is available
-pub type FrameReady = sys::PsFrameReady;
+pub type FrameReady = sys::ScFrameReady;
 
 /// Depth/IR/RGB image frame data.
-pub type Frame = sys::PsFrame;
+pub type Frame = sys::ScFrame;
+
+/// implement trait DataLen to allow use of type Frame in touch_detector
+impl crate::util::touch_detector::DataLen for Frame {
+    fn get_p_frame_data(&self) -> *mut u8 {
+        self.pFrameData
+    }
+    fn get_data_len(&self) -> usize {
+        self.dataLen as usize
+    }
+}
 
 /// The available frame types, `Depth` and `RGB` (optical). IR frame is not implemented yet.
 pub enum FrameType {
@@ -22,10 +30,10 @@ pub enum FrameType {
     RGB,
 }
 
-/// Captures the next image frame from `device`. This API must be invoked before capturing frame data using `get_frame()`. `frame_ready` is a pointer to a buffer storing the signal for the frame availability.
-pub fn read_next_frame(device: Device, frame_ready: &mut FrameReady) {
+/// Captures the next image frame from `device`. This API must be invoked before capturing frame data using `get_frame()`. `max_wait_time_ms` is the maximum waiting time for the next frame in milliseconds. The recommended value is 2 * 1000 / fps. `frame_ready` is a pointer to a buffer storing the signal for the frame availability.
+pub fn read_next_frame(device: Device, max_wait_time_ms: u16, frame_ready: &mut FrameReady) {
     unsafe {
-        sys::Ps2_ReadNextFrame(device, SESSION_INDEX, frame_ready);
+        sys::scGetFrameReady(device, max_wait_time_ms, frame_ready);
     }
 }
 
@@ -40,21 +48,21 @@ pub fn get_frame(
         match frame_type {
             FrameType::Depth => {
                 if frame_ready.depth() == 1 {
-                    sys::Ps2_GetFrame(device, SESSION_INDEX, sys::PsFrameType_PsDepthFrame, frame);
+                    sys::scGetFrame(device, sys::ScFrameType_SC_DEPTH_FRAME, frame);
                 }
             }
             FrameType::RGB => {
                 // check if rgb is mapped to depth
-                let is_mapped = &mut 0;
-                sys::Ps2_GetMapperEnabledDepthToRGB(device, SESSION_INDEX, is_mapped);
+                let is_mapped = 0;
+                sys::scSetTransformDepthImgToColorSensorEnabled(device, is_mapped);
 
-                let rgb_frame_type = match *is_mapped {
-                    0 => sys::PsFrameType_PsRGBFrame,
-                    _ => sys::PsFrameType_PsMappedRGBFrame,
+                let rgb_frame_type = match is_mapped {
+                    0 => sys::ScFrameType_SC_COLOR_FRAME,
+                    _ => sys::ScFrameType_SC_TRANSFORM_DEPTH_IMG_TO_COLOR_SENSOR_FRAME,
                 };
 
-                if frame_ready.rgb() == 1 {
-                    sys::Ps2_GetFrame(device, SESSION_INDEX, rgb_frame_type, frame);
+                if frame_ready.color() == 1 {
+                    sys::scGetFrame(device, rgb_frame_type, frame);
                 }
             }
         }

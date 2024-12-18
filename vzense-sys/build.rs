@@ -3,7 +3,7 @@ fn main() {
     {
         // create bindings for two APIs
         let headers = ["include/Vzense_api_560.h", "include/Scepter_api.h"];
-        let binding_file_names = ["dcam560.rs", "nyx650.rs"];
+        let binding_file_names = ["dcam560.rs", "scepter.rs"];
 
         for i in 0..2 {
             let bindings = bindgen::Builder::default()

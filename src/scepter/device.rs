@@ -3,12 +3,13 @@
 use std::ffi::CStr;
 
 use sys::ScStatus_SC_OK as ok;
-use vzense_sys::nyx650 as sys;
+use vzense_sys::scepter as sys;
 
 /// Device to connect to.
 pub type Device = sys::ScDeviceHandle;
 
 /// Possible RGB resolutions.
+#[derive(PartialEq)]
 pub enum RGBResolution {
     RGBRes640x480,
     RGBRes800x600,
@@ -36,19 +37,18 @@ impl Resolution {
     pub fn to_pixel_count(&self) -> usize {
         self.width as usize * self.height as usize
     }
+    pub fn double(&self) -> Self {
+        Self {
+            width: 2 * self.width,
+            height: 2 * self.height,
+        }
+    }
 }
 
 /// For the Depth and IR frames, the resolution is fixed to 640x480 for all data modes. The rgb frame can be set to higher resolutions using `set_rgb_resolution()`, but the defaults is also 640x480.
 pub const DEFAULT_RESOLUTION: Resolution = Resolution::new(640, 480);
 
-/// Possible depth ranges.
-pub enum DepthRange {
-    Near,
-    Mid,
-    Far,
-}
-
-/// Initializes the sytem and returns a device if it finds one. Make sure a Vzense camera is connected. After 10 seconds the routine will time out if no device was found.
+/// Initializes the sytem and returns a device if it finds one. Make sure a Vzense camera is connected. After 3 seconds the routine will time out if no device was found.
 pub fn init() -> Result<Device, String> {
     unsafe {
         println!("initializing...");
@@ -64,6 +64,8 @@ pub fn init() -> Result<Device, String> {
         } else {
             if *device_count > 0 {
                 print!("device found, ");
+            } else {
+                return Err("no device found".to_string());
             }
         }
 
@@ -71,7 +73,12 @@ pub fn init() -> Result<Device, String> {
 
         sys::scGetDeviceInfoList(*device_count, device_info);
         let ip = device_info.ip.as_ptr();
-        println!("IP: {}", CStr::from_ptr(ip).to_str().unwrap());
+        let model = device_info.productName.as_ptr();
+        println!(
+            "model: {}, IP: {}",
+            CStr::from_ptr(model).to_str().unwrap(),
+            CStr::from_ptr(ip).to_str().unwrap()
+        );
 
         let device = &mut (0 as sys::ScDeviceHandle);
         status = sys::scOpenDeviceByIP(ip, device);
@@ -91,7 +98,7 @@ pub fn init() -> Result<Device, String> {
         if status != ok {
             return Err(format!("get work mode failed with status {}", status));
         } else {
-            println!("data mode: {}", *work_mode);
+            println!("work mode: {}", *work_mode);
         }
 
         Ok(*device)
@@ -99,37 +106,34 @@ pub fn init() -> Result<Device, String> {
 }
 
 /// Enable or disable the mapping of RGB image to depth camera space.
-// pub fn set_mapper_depth_to_rgb(device: Device, is_enabled: bool) {
-//     let rgb_resolution = get_rgb_resolution(device);
-//     if rgb_resolution != DEFAULT_RESOLUTION {
-//         set_rgb_resolution(device, super::device::RGBResolution::RGBRes640x480);
-//     }
-//     unsafe {
-//         let is_enabled = if is_enabled { 1 } else { 0 };
-//         sys::Ps2_SetMapperEnabledDepthToRGB(device, SESSION_INDEX, is_enabled);
-//     }
-// }
+pub fn set_mapper_depth_to_rgb(device: Device, is_enabled: bool) {
+    let rgb_resolution = get_rgb_resolution(device);
+    if rgb_resolution != DEFAULT_RESOLUTION {
+        set_rgb_resolution(device, RGBResolution::RGBRes640x480);
+    }
+    unsafe {
+        sys::scSetTransformDepthImgToColorSensorEnabled(device, if is_enabled { 1 } else { 0 });
+    }
+}
 
 /// Sets the resolution of the rgb frame. Three resolutions are currently available: 640x480, 800x600, and 1600x1200.
-// pub fn set_rgb_resolution(device: Device, resolution: RGBResolution) {
-//     unsafe {
-//         let mut resolution = match resolution {
-//             RGBResolution::RGBRes640x480 => sys::PsResolution_PsRGB_Resolution_640_480,
-//             RGBResolution::RGBRes800x600 => sys::PsResolution_PsRGB_Resolution_800_600,
-//             RGBResolution::RGBRes1600x1200 => sys::PsResolution_PsRGB_Resolution_1600_1200,
-//         };
+pub fn set_rgb_resolution(device: Device, resolution: RGBResolution) {
+    unsafe {
+        // check if rgb is mapped to depth
+        let is_mapped = &mut 0;
+        sys::scGetTransformDepthImgToColorSensorEnabled(device, is_mapped);
+        if *is_mapped == 1 && resolution != RGBResolution::RGBRes640x480 {
+            sys::scSetColorResolution(device, 640, 480);
+            println!("setting of rgb resolution is ignored because rgb frame is mapped to depth")
+        }
 
-//         // check if rgb is mapped to depth
-//         let is_mapped = &mut 0;
-//         sys::Ps2_GetMapperEnabledDepthToRGB(device, SESSION_INDEX, is_mapped);
-//         if *is_mapped == 1 {
-//             resolution = sys::PsResolution_PsRGB_Resolution_640_480;
-//             println!("setting of rgb resolution is ignored because rgb frame is mapped to depth")
-//         }
-
-//         sys::Ps2_SetRGBResolution(device, SESSION_INDEX, resolution);
-//     }
-// }
+        match resolution {
+            RGBResolution::RGBRes640x480 => sys::scSetColorResolution(device, 640, 480),
+            RGBResolution::RGBRes800x600 => sys::scSetColorResolution(device, 800, 600),
+            RGBResolution::RGBRes1600x1200 => sys::scSetColorResolution(device, 1600, 1200),
+        };
+    }
+}
 
 /// Returns the resolution of the rgb frame.
 pub fn get_rgb_resolution(device: Device) -> Resolution {
@@ -141,37 +145,15 @@ pub fn get_rgb_resolution(device: Device) -> Resolution {
     Resolution::new(*w as u32, *h as u32)
 }
 
-/// Sets the depth range mode.
-// pub fn set_depth_rannge(device: Device, depth_range: DepthRange) {
-//     let depth_range = match depth_range {
-//         DepthRange::Near => 0,
-//         DepthRange::Mid => 1,
-//         DepthRange::Far => 2,
-//     };
-//     unsafe {
-//         sys::Ps2_SetDepthRange(device, SESSION_INDEX, depth_range);
-//     }
-// }
-
-/// Returns the current measuring range `(min, max)` of the camera in mm
-// pub fn get_measuring_range(device: Device) -> (u16, u16) {
-//     unsafe {
-//         let depth_range = &mut sys::PsDepthRange::default();
-
-//         sys::Ps2_GetDepthRange(device, SESSION_INDEX, depth_range);
-
-//         let mr = &mut sys::PsMeasuringRange::default();
-
-//         sys::Ps2_GetMeasuringRange(device, SESSION_INDEX, *depth_range, mr);
-
-//         match *depth_range {
-//             0 => (mr.effectDepthMinNear, mr.effectDepthMaxNear),
-//             1 => (mr.effectDepthMinMid, mr.effectDepthMaxMid),
-//             2 => (mr.effectDepthMinFar, mr.effectDepthMaxFar),
-//             _ => panic!("unknown measuring range"),
-//         }
-//     }
-// }
+/// Returns the current depth range `(min, max)` of the camera in mm. Note: At least the min value seems to have no practical meaning. For the NYX650 the returned min value is 1 mm which makes no sense, while the max value is 4700 mm. In the specs the depth range for the NYX650 is given as min: 300 mm, max: 4500 mm.
+pub fn get_depth_range(device: Device) -> (u16, u16) {
+    unsafe {
+        let min = &mut 0;
+        let max = &mut 0;
+        sys::scGetDepthRangeValue(device, min, max);
+        (*min as u16, *max as u16)
+    }
+}
 
 /// Stops the stream, closes the device, and clears all resources.
 pub fn shut_down(device: &mut Device) {

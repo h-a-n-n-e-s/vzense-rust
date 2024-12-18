@@ -158,7 +158,7 @@ pub fn get_rgb_resolution(device: Device) -> Resolution {
 }
 
 /// Sets the depth range mode.
-pub fn set_depth_rannge(device: Device, depth_range: DepthRange) {
+pub fn set_depth_range(device: Device, depth_range: DepthRange) {
     let depth_range = match depth_range {
         DepthRange::Near => 0,
         DepthRange::Mid => 1,

@@ -2,8 +2,13 @@
 
 use std::iter::zip;
 
-use super::{device::DEFAULT_RESOLUTION, frame::Frame};
-use crate::util::new_fixed_vec;
+use super::new_fixed_vec;
+
+/// to allow invocation of generic type Frame
+pub trait DataLen {
+    fn get_p_frame_data(&self) -> *mut u8;
+    fn get_data_len(&self) -> usize;
+}
 
 /**
 ### A simple touch detector based on depth data.
@@ -39,8 +44,8 @@ impl TouchDetector {
         max_touch: f32,
         baseline_sample_size: usize,
         sample_size: usize,
+        pixel_count: usize,
     ) -> Self {
-        let pixel_count = DEFAULT_RESOLUTION.to_pixel_count();
         Self {
             min_depth,
             max_depth,
@@ -58,11 +63,14 @@ impl TouchDetector {
     }
 
     /// Processes one input `frame` resulting in a `touch_signal` (255 for 'touch', 0 otherwise).
-    pub fn process(&mut self, frame: &Frame, touch_signal: &mut [u8]) {
+    pub fn process<Frame: DataLen>(&mut self, depth_frame: &Frame, touch_signal: &mut [u8]) {
         unsafe {
-            let p = std::ptr::slice_from_raw_parts(frame.pFrameData, frame.dataLen as usize)
-                .as_ref()
-                .unwrap();
+            let p = std::ptr::slice_from_raw_parts(
+                depth_frame.get_p_frame_data(),
+                depth_frame.get_data_len(),
+            )
+            .as_ref()
+            .unwrap();
 
             for (i, pi) in p.chunks_exact(2).enumerate() {
                 // create one u16 from two consecutive u8 and clamp to measuring range

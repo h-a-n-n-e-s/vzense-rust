@@ -2,20 +2,21 @@
 This example covers all the functionality provided by the library. It connects to a device, starts a stream, and displays the received data. The `touch_detector` is a very simple example of image processing, using depth data to detect touch events.
 */
 
-use vzense_rust::dcam560::{
+use vzense_rust::scepter::{
     device::{
-        get_measuring_range, get_rgb_resolution, init, set_depth_range, set_mapper_depth_to_rgb,
-        set_rgb_resolution, shut_down, DepthRange, RGBResolution, Resolution, DEFAULT_RESOLUTION,
+        get_rgb_resolution, init, set_mapper_depth_to_rgb, set_rgb_resolution, shut_down,
+        RGBResolution, Resolution, DEFAULT_RESOLUTION,
     },
     frame::{
         check_pixel_count, get_bgr, get_frame, get_normalized_depth, read_next_frame, Frame,
         FrameReady, FrameType,
     },
-    touch_detector::TouchDetector,
 };
-use vzense_rust::util::{new_fixed_vec, KeyboardEvent, TURBO_COLOR_MAP};
+use vzense_rust::util::{
+    new_fixed_vec, touch_detector::TouchDetector, KeyboardEvent, TURBO_COLOR_MAP,
+};
 
-use show_image::{create_window, ImageInfo, ImageView, WindowOptions, WindowProxy};
+use show_image::{ImageInfo, ImageView, WindowOptions, WindowProxy};
 use std::{io::Write, time::Instant};
 
 #[show_image::main]
@@ -30,11 +31,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    // choosing the depth range (Near, Mid, or Far)
-    set_depth_range(device, DepthRange::Mid);
-
-    let (min_depth, max_depth) = get_measuring_range(device);
-    println!("measuring range: {} mm to {} mm", min_depth, max_depth);
+    // choosing the depth range in mm which will influence the color mapping of the depth output. In the specs the depth range for the NYX650 is given as min: 300 mm, max: 4500 mm.
+    let (min_depth, max_depth) = (500, 1500);
 
     let frame_ready = &mut FrameReady::default();
     let frame = &mut Frame::default();
@@ -44,24 +42,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Setting the rgb resolution. If not set the default will be 640x480.
     // If mapper is set to true, resolution setting will be ignored and reverted to 640x480.
-    set_rgb_resolution(device, RGBResolution::RGBRes1600x1200);
+    set_rgb_resolution(device, RGBResolution::RGBRes640x480);
     let rgb_resolution = get_rgb_resolution(device);
 
-    let signal = &mut new_fixed_vec(DEFAULT_RESOLUTION.to_pixel_count(), 0u8);
-    let out = &mut new_fixed_vec(3 * DEFAULT_RESOLUTION.to_pixel_count(), 0u8);
+    let default_pixel_count = DEFAULT_RESOLUTION.to_pixel_count();
+    
+    let signal = &mut new_fixed_vec(default_pixel_count, 0u8);
+    let out = &mut new_fixed_vec(3 * default_pixel_count, 0u8);
     let bgr = &mut new_fixed_vec(3 * rgb_resolution.to_pixel_count(), 0u8);
 
-    let mut touch_detector = TouchDetector::new(min_depth, max_depth, 10.0, 50.0, 30, 10);
+    let mut touch_detector =
+        TouchDetector::new(min_depth, max_depth, 5.0, 50.0, 30, 10, default_pixel_count);
 
-    let rgb_window = create_window(
-        "rgb",
-        WindowOptions {
-            size: Some(rgb_resolution.to_array()),
-            ..Default::default()
-        },
-    )?;
-    let depth_window = create_window("depth", Default::default())?;
-    let touch_window = create_window("touch", Default::default())?;
+    let rgb_window = create_window("rgb", &rgb_resolution.double(), true);
+    let depth_window = create_window("depth", &DEFAULT_RESOLUTION.double(), true);
+    let touch_window = create_window("touch", &DEFAULT_RESOLUTION.double(), true);
 
     let stop = KeyboardEvent::new("\n");
 
@@ -71,7 +66,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // main loop reading frames and displaying them
     loop {
-        read_next_frame(device, frame_ready);
+        read_next_frame(device, 66, frame_ready);
 
         // depth __________________________________________
 
@@ -148,8 +143,14 @@ fn update_window(window: &WindowProxy, resolution: &Resolution, data: &[u8], for
     window.set_image("image", image).unwrap();
 }
 
-// fn _destroy_window(window: &WindowProxy) {
-//     window.run_function(|w| {
-//         w.destroy();
-//     });
-// }
+fn create_window(name: &str, size: &Resolution, allow_drag_and_zoom: bool) -> WindowProxy {
+    show_image::create_window(
+        name,
+        WindowOptions {
+            size: Some(size.to_array()),
+            default_controls: allow_drag_and_zoom,
+            ..Default::default()
+        },
+    )
+    .unwrap()
+}
