@@ -5,7 +5,7 @@ This example covers all the functionality provided by the library. It connects t
 // by default using the newest Scepter API
 #[cfg(not(feature = "dcam560"))]
 use vzense_rust::scepter::{
-    device::{get_rgb_resolution, init, set_mapper_depth_to_rgb, set_rgb_resolution, shut_down},
+    device::{get_rgb_resolution, init, map_rgb_to_depth, set_rgb_resolution, shut_down},
     frame::{
         check_pixel_count, get_bgr, get_frame, get_normalized_depth, read_next_frame, Frame,
         FrameReady, FrameType,
@@ -17,7 +17,7 @@ use vzense_rust::scepter::{
 use vzense_rust::dcam560::{
     device::{
         get_depth_measuring_range, get_rgb_resolution, init, set_depth_measuring_range_dcam560,
-        set_mapper_depth_to_rgb, set_rgb_resolution, shut_down, DepthRange,
+        map_rgb_to_depth, set_rgb_resolution, shut_down, DepthRange,
     },
     frame::{
         check_pixel_count, get_bgr, get_frame, get_normalized_depth, read_next_frame, Frame,
@@ -26,7 +26,8 @@ use vzense_rust::dcam560::{
 };
 
 use vzense_rust::util::{
-    color_map::TURBO, new_fixed_vec, touch_detector::TouchDetector, KeyboardEvent, RGBResolution, Resolution, DEFAULT_PIXEL_COUNT, DEFAULT_RESOLUTION
+    color_map::TURBO, new_fixed_vec, touch_detector::TouchDetector, KeyboardEvent, RGBResolution,
+    Resolution, DEFAULT_PIXEL_COUNT, DEFAULT_RESOLUTION,
 };
 
 use show_image::{ImageInfo, ImageView, WindowOptions, WindowProxy};
@@ -59,12 +60,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut touch_detector =
         TouchDetector::new(min_depth, max_depth, 5.0, 50.0, 30, 10, DEFAULT_PIXEL_COUNT);
 
-    // If mapper is set to true it resets rgb_resolution to 640x480.
-    set_mapper_depth_to_rgb(device, false);
-
     // Setting the rgb resolution. If not set the default will be 640x480.
     // If mapper is set to true, resolution setting will be ignored and reverted to 640x480.
-    set_rgb_resolution(device, RGBResolution::RGBRes800x600);
+    set_rgb_resolution(device, RGBResolution::RGBRes640x480);
+
+    // If mapping is set to true it resets rgb_resolution to 640x480.
+    map_rgb_to_depth(device, true);
+
     let rgb_resolution = get_rgb_resolution(device);
 
     let signal = &mut new_fixed_vec(DEFAULT_PIXEL_COUNT, 0u8);

@@ -36,7 +36,7 @@ impl Resolution {
         (self.width, self.height)
     }
     pub const fn to_pixel_count(&self) -> usize {
-        self.width as usize * self.height as usize
+        (self.width * self.height) as usize
     }
     pub const fn double(&self) -> Self {
         Self {

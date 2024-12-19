@@ -53,12 +53,14 @@ pub fn get_frame(
             }
             FrameType::RGB => {
                 // check if rgb is mapped to depth
-                let is_mapped = 0;
-                sys::scSetTransformDepthImgToColorSensorEnabled(device, is_mapped);
+                let is_mapped = &mut 0;
+                // sys::scGetTransformDepthImgToColorSensorEnabled(device, is_mapped);
+                sys::scGetTransformColorImgToDepthSensorEnabled(device, is_mapped);
 
-                let rgb_frame_type = match is_mapped {
+                let rgb_frame_type = match *is_mapped {
                     0 => sys::ScFrameType_SC_COLOR_FRAME,
-                    _ => sys::ScFrameType_SC_TRANSFORM_DEPTH_IMG_TO_COLOR_SENSOR_FRAME,
+                    // _ => sys::ScFrameType_SC_TRANSFORM_DEPTH_IMG_TO_COLOR_SENSOR_FRAME,
+                    _ => sys::ScFrameType_SC_TRANSFORM_COLOR_IMG_TO_DEPTH_SENSOR_FRAME,
                 };
 
                 if frame_ready.color() == 1 {

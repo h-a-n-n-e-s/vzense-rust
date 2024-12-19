@@ -56,6 +56,7 @@ pub fn get_frame(
             FrameType::RGB => {
                 // check if rgb is mapped to depth
                 let is_mapped = &mut 0;
+                // should actually be `Ps2_GetMapperEnabledRGBToDepth` but the names seem to be mixed up
                 sys::Ps2_GetMapperEnabledDepthToRGB(device, SESSION_INDEX, is_mapped);
 
                 let rgb_frame_type = match *is_mapped {
