@@ -2,18 +2,31 @@
 This example covers all the functionality provided by the library. It connects to a device, starts a stream, and displays the received data. The `touch_detector` is a very simple example of image processing, using depth data to detect touch events.
 */
 
+// by default using the newest Scepter API
+#[cfg(not(feature = "dcam560"))]
 use vzense_rust::scepter::{
+    device::{get_rgb_resolution, init, set_mapper_depth_to_rgb, set_rgb_resolution, shut_down},
+    frame::{
+        check_pixel_count, get_bgr, get_frame, get_normalized_depth, read_next_frame, Frame,
+        FrameReady, FrameType,
+    },
+};
+
+// uses the older API specifically for the DCAM560 model
+#[cfg(feature = "dcam560")]
+use vzense_rust::dcam560::{
     device::{
-        get_rgb_resolution, init, set_mapper_depth_to_rgb, set_rgb_resolution, shut_down,
-        RGBResolution, Resolution, DEFAULT_RESOLUTION,
+        get_depth_measuring_range, get_rgb_resolution, init, set_depth_measuring_range_dcam560,
+        set_mapper_depth_to_rgb, set_rgb_resolution, shut_down, DepthRange,
     },
     frame::{
         check_pixel_count, get_bgr, get_frame, get_normalized_depth, read_next_frame, Frame,
         FrameReady, FrameType,
     },
 };
+
 use vzense_rust::util::{
-    new_fixed_vec, touch_detector::TouchDetector, KeyboardEvent, TURBO_COLOR_MAP,
+    color_map::TURBO, new_fixed_vec, touch_detector::TouchDetector, KeyboardEvent, RGBResolution, Resolution, DEFAULT_PIXEL_COUNT, DEFAULT_RESOLUTION
 };
 
 use show_image::{ImageInfo, ImageView, WindowOptions, WindowProxy};
@@ -31,28 +44,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    // choosing the depth range in mm which will influence the color mapping of the depth output. In the specs the depth range for the NYX650 is given as min: 300 mm, max: 4500 mm.
+    // choosing the depth measuring range for DCAM560 (Near, Mid, or Far)
+    #[cfg(feature = "dcam560")]
+    {
+        set_depth_measuring_range_dcam560(device, DepthRange::Mid);
+
+        let range = get_depth_measuring_range(device);
+        println!("depth measuring range: {} mm to {} mm", range.0, range.1);
+    }
+
+    // choosing the min/max depth in mm for the color mapping of the depth output. These values also bound the depths used in the `TochDetector` to reduce measuring artifacts. In the specs the depth measuring range for the NYX650 is given as min: 300 mm, max: 4500 mm. The depth measuring range for the DCAM560 depends on the range chosen above.
     let (min_depth, max_depth) = (500, 1500);
 
-    let frame_ready = &mut FrameReady::default();
-    let frame = &mut Frame::default();
+    let mut touch_detector =
+        TouchDetector::new(min_depth, max_depth, 5.0, 50.0, 30, 10, DEFAULT_PIXEL_COUNT);
 
     // If mapper is set to true it resets rgb_resolution to 640x480.
-    set_mapper_depth_to_rgb(device, true);
+    set_mapper_depth_to_rgb(device, false);
 
     // Setting the rgb resolution. If not set the default will be 640x480.
     // If mapper is set to true, resolution setting will be ignored and reverted to 640x480.
-    set_rgb_resolution(device, RGBResolution::RGBRes640x480);
+    set_rgb_resolution(device, RGBResolution::RGBRes800x600);
     let rgb_resolution = get_rgb_resolution(device);
 
-    let default_pixel_count = DEFAULT_RESOLUTION.to_pixel_count();
-    
-    let signal = &mut new_fixed_vec(default_pixel_count, 0u8);
-    let out = &mut new_fixed_vec(3 * default_pixel_count, 0u8);
+    let signal = &mut new_fixed_vec(DEFAULT_PIXEL_COUNT, 0u8);
+    let out = &mut new_fixed_vec(3 * DEFAULT_PIXEL_COUNT, 0u8);
     let bgr = &mut new_fixed_vec(3 * rgb_resolution.to_pixel_count(), 0u8);
-
-    let mut touch_detector =
-        TouchDetector::new(min_depth, max_depth, 5.0, 50.0, 30, 10, default_pixel_count);
 
     let rgb_window = create_window("rgb", &rgb_resolution.double(), true);
     let depth_window = create_window("depth", &DEFAULT_RESOLUTION.double(), true);
@@ -60,13 +77,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let stop = KeyboardEvent::new("\n");
 
+    let frame_ready = &mut FrameReady::default();
+    let frame = &mut Frame::default();
+
     let mut count = 0;
     let mut now = Instant::now();
     let mut init = true;
 
     // main loop reading frames and displaying them
     loop {
+        // Scepter API has an additional `max_wait_time_ms` paramter
+        #[cfg(not(feature = "dcam560"))]
         read_next_frame(device, 66, frame_ready);
+
+        #[cfg(feature = "dcam560")]
+        read_next_frame(device, frame_ready);
 
         // depth __________________________________________
 
@@ -77,7 +102,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // apply color map
         for (i, si) in signal.iter().enumerate() {
-            let rgb = &TURBO_COLOR_MAP[*si as usize];
+            let rgb = &TURBO[*si as usize];
             out[3 * i..3 * i + 3].copy_from_slice(rgb);
         }
 
@@ -154,3 +179,9 @@ fn create_window(name: &str, size: &Resolution, allow_drag_and_zoom: bool) -> Wi
     )
     .unwrap()
 }
+
+// fn _destroy_window(window: &WindowProxy) {
+//     window.run_function(|w| {
+//         w.destroy();
+//     });
+// }

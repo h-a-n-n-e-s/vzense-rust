@@ -16,8 +16,11 @@ vzense-sys = { path = "vzense-sys" }
 show-image = "0.14.0"
 
 [features]
-# uses the already created bindings in vzense-sys/bindings
-default = []
+# default = ["scepter"]
+# uses the newest Scepter API
+# scepter = []
+# uses the older API specifically for the DCAM560 model
+dcam560 = []
 # recreates the bindings for vzense-sys
 run-bindgen = ["vzense-sys/run-bindgen"]
 

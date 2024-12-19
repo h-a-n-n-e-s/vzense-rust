@@ -2,64 +2,26 @@
 
 use std::ffi::CStr;
 
-use sys::ScStatus_SC_OK as ok;
+use sys::ScStatus_SC_OK as OK;
 use vzense_sys::scepter as sys;
+
+use crate::util::{RGBResolution, Resolution, DEFAULT_RESOLUTION};
 
 /// Device to connect to.
 pub type Device = sys::ScDeviceHandle;
-
-/// Possible RGB resolutions.
-#[derive(PartialEq)]
-pub enum RGBResolution {
-    RGBRes640x480,
-    RGBRes800x600,
-    RGBRes1600x1200,
-}
-
-#[derive(PartialEq)]
-pub struct Resolution {
-    width: u32,
-    height: u32,
-}
-impl Resolution {
-    pub const fn new(w: u32, h: u32) -> Self {
-        Self {
-            width: w,
-            height: h,
-        }
-    }
-    pub fn to_array(&self) -> [u32; 2] {
-        [self.width, self.height]
-    }
-    pub fn to_tuple(&self) -> (u32, u32) {
-        (self.width, self.height)
-    }
-    pub fn to_pixel_count(&self) -> usize {
-        self.width as usize * self.height as usize
-    }
-    pub fn double(&self) -> Self {
-        Self {
-            width: 2 * self.width,
-            height: 2 * self.height,
-        }
-    }
-}
-
-/// For the Depth and IR frames, the resolution is fixed to 640x480 for all data modes. The rgb frame can be set to higher resolutions using `set_rgb_resolution()`, but the defaults is also 640x480.
-pub const DEFAULT_RESOLUTION: Resolution = Resolution::new(640, 480);
 
 /// Initializes the sytem and returns a device if it finds one. Make sure a Vzense camera is connected. After 3 seconds the routine will time out if no device was found.
 pub fn init() -> Result<Device, String> {
     unsafe {
         println!("initializing...");
         let mut status = sys::scInitialize();
-        if status != ok {
+        if status != OK {
             return Err(format!("initialization failed with status {}", status));
         }
         let device_count = &mut 0;
         println!("searching for device...");
         status = sys::scGetDeviceCount(device_count, 3000);
-        if status != ok {
+        if status != OK {
             return Err(format!("get device count failed with status {}", status));
         } else {
             if *device_count > 0 {
@@ -82,12 +44,12 @@ pub fn init() -> Result<Device, String> {
 
         let device = &mut (0 as sys::ScDeviceHandle);
         status = sys::scOpenDeviceByIP(ip, device);
-        if status != ok {
+        if status != OK {
             return Err(format!("open device failed with status {}", status));
         }
 
         status = sys::scStartStream(*device);
-        if status != ok {
+        if status != OK {
             return Err(format!("start stream failed with status {}", status));
         } else {
             println!("stream started");
@@ -95,7 +57,7 @@ pub fn init() -> Result<Device, String> {
 
         let work_mode = &mut sys::ScWorkMode::default();
         status = sys::scGetWorkMode(*device, work_mode);
-        if status != ok {
+        if status != OK {
             return Err(format!("get work mode failed with status {}", status));
         } else {
             println!("work mode: {}", *work_mode);
@@ -146,7 +108,7 @@ pub fn get_rgb_resolution(device: Device) -> Resolution {
 }
 
 /// Returns the current depth range `(min, max)` of the camera in mm. Note: At least the min value seems to have no practical meaning. For the NYX650 the returned min value is 1 mm which makes no sense, while the max value is 4700 mm. In the specs the depth range for the NYX650 is given as min: 300 mm, max: 4500 mm.
-pub fn get_depth_range(device: Device) -> (u16, u16) {
+pub fn get_depth_measuring_range(device: Device) -> (u16, u16) {
     unsafe {
         let min = &mut 0;
         let max = &mut 0;
@@ -162,7 +124,7 @@ pub fn shut_down(device: &mut Device) {
         sys::scCloseDevice(device);
 
         let status = sys::scShutdown();
-        if status != ok {
+        if status != OK {
             println!("shut down failed with status: {}", status);
         } else {
             println!("shut down device successfully");

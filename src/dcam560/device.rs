@@ -2,46 +2,15 @@
 
 use std::{ffi::CStr, thread::sleep, time::Duration};
 
-use sys::PsReturnStatus_PsRetOK as ok;
+use sys::PsReturnStatus_PsRetOK as OK;
 use vzense_sys::dcam560 as sys;
+
+use crate::util::{RGBResolution, Resolution, DEFAULT_RESOLUTION};
 
 use super::SESSION_INDEX;
 
 /// Device to connect to.
 pub type Device = sys::PsDeviceHandle;
-
-/// Possible RGB resolutions.
-pub enum RGBResolution {
-    RGBRes640x480,
-    RGBRes800x600,
-    RGBRes1600x1200,
-}
-
-#[derive(PartialEq)]
-pub struct Resolution {
-    width: u32,
-    height: u32,
-}
-impl Resolution {
-    pub const fn new(w: u32, h: u32) -> Self {
-        Self {
-            width: w,
-            height: h,
-        }
-    }
-    pub fn to_array(&self) -> [u32; 2] {
-        [self.width, self.height]
-    }
-    pub fn to_tuple(&self) -> (u32, u32) {
-        (self.width, self.height)
-    }
-    pub fn to_pixel_count(&self) -> usize {
-        self.width as usize * self.height as usize
-    }
-}
-
-/// For the Depth and IR frames, the resolution is fixed to 640x480 for all data modes. The rgb frame can be set to higher resolutions using `set_rgb_resolution()`, but the defaults is also 640x480.
-pub const DEFAULT_RESOLUTION: Resolution = Resolution::new(640, 480);
 
 /// Possible depth ranges.
 pub enum DepthRange {
@@ -50,12 +19,12 @@ pub enum DepthRange {
     Far,
 }
 
-/// Initializes the sytem and returns a device if it finds one. Make sure a Vzense camera is connected. After 10 seconds the routine will time out if no device was found.
+/// Initializes the sytem and returns a device if it finds one. Make sure a Vzense camera is connected. After 3 seconds the routine will time out if no device was found.
 pub fn init() -> Result<Device, String> {
     unsafe {
         println!("initializing...");
         let mut status = sys::Ps2_Initialize();
-        if status != ok {
+        if status != OK {
             return Err(format!("initialization failed with status {}", status));
         }
         let device_count = &mut 0;
@@ -63,7 +32,7 @@ pub fn init() -> Result<Device, String> {
         println!("searching for device...");
         loop {
             status = sys::Ps2_GetDeviceCount(device_count);
-            if status != ok {
+            if status != OK {
                 return Err(format!("get device count failed with status {}", status));
             } else {
                 if *device_count > 0 {
@@ -71,8 +40,8 @@ pub fn init() -> Result<Device, String> {
                     break;
                 }
                 times_tried += 1;
-                // give up after 10 seconds
-                if times_tried == 50 {
+                // give up after 3 seconds
+                if times_tried == 15 {
                     return Err(format!("no device found"));
                 }
                 sleep(Duration::from_millis(200));
@@ -83,16 +52,21 @@ pub fn init() -> Result<Device, String> {
 
         sys::Ps2_GetDeviceListInfo(device_info, *device_count);
         let uri = device_info.uri.as_ptr();
-        println!("uri: {}", CStr::from_ptr(uri).to_str().unwrap());
+        let ip = device_info.ip.as_ptr();
+        println!(
+            "uri: {}, IP: {}",
+            CStr::from_ptr(uri).to_str().unwrap(),
+            CStr::from_ptr(ip).to_str().unwrap()
+        );
 
         let device = &mut (0 as sys::PsDeviceHandle);
         status = sys::Ps2_OpenDevice(uri, device);
-        if status != ok {
+        if status != OK {
             return Err(format!("open device failed with status {}", status));
         }
 
         status = sys::Ps2_StartStream(*device, SESSION_INDEX);
-        if status != ok {
+        if status != OK {
             return Err(format!("start stream failed with status {}", status));
         } else {
             println!("stream started");
@@ -100,7 +74,7 @@ pub fn init() -> Result<Device, String> {
 
         let data_mode = &mut sys::PsDataMode::default();
         status = sys::Ps2_GetDataMode(*device, SESSION_INDEX, data_mode);
-        if status != ok {
+        if status != OK {
             return Err(format!("get data mode failed with status {}", status));
         } else {
             println!("data mode: {}", *data_mode);
@@ -114,7 +88,7 @@ pub fn init() -> Result<Device, String> {
 pub fn set_mapper_depth_to_rgb(device: Device, is_enabled: bool) {
     let rgb_resolution = get_rgb_resolution(device);
     if rgb_resolution != DEFAULT_RESOLUTION {
-        set_rgb_resolution(device, super::device::RGBResolution::RGBRes640x480);
+        set_rgb_resolution(device, RGBResolution::RGBRes640x480);
     }
     unsafe {
         let is_enabled = if is_enabled { 1 } else { 0 };
@@ -158,7 +132,7 @@ pub fn get_rgb_resolution(device: Device) -> Resolution {
 }
 
 /// Sets the depth range mode.
-pub fn set_depth_range(device: Device, depth_range: DepthRange) {
+pub fn set_depth_measuring_range_dcam560(device: Device, depth_range: DepthRange) {
     let depth_range = match depth_range {
         DepthRange::Near => 0,
         DepthRange::Mid => 1,
@@ -170,7 +144,7 @@ pub fn set_depth_range(device: Device, depth_range: DepthRange) {
 }
 
 /// Returns the current measuring range `(min, max)` of the camera in mm
-pub fn get_measuring_range(device: Device) -> (u16, u16) {
+pub fn get_depth_measuring_range(device: Device) -> (u16, u16) {
     unsafe {
         let depth_range = &mut sys::PsDepthRange::default();
 
@@ -196,7 +170,7 @@ pub fn shut_down(device: &mut Device) {
         sys::Ps2_CloseDevice(device);
 
         let status = sys::Ps2_Shutdown();
-        if status != ok {
+        if status != OK {
             println!("shut down failed with status: {}", status);
         } else {
             println!("shut down device successfully");

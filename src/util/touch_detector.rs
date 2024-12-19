@@ -5,7 +5,7 @@ use std::iter::zip;
 use super::new_fixed_vec;
 
 /// to allow invocation of generic type Frame
-pub trait DataLen {
+pub trait Data {
     fn get_p_frame_data(&self) -> *mut u8;
     fn get_data_len(&self) -> usize;
 }
@@ -15,7 +15,7 @@ pub trait DataLen {
 
 The touch detector uses depth data to calculate the difference between the current depth and an initially recorded baseline depth. If this difference is between `min_touch` and `max_touch` a touch is assumed.
 
-* `min_depth` and `max_depth` are the measuring ranges of the depth camera.
+* `min_depth` and `max_depth` are the measuring ranges of the depth camera in mm.
 * `min_touch` is the minimum height in mm above the surface considered to be a touch. If this parameter is too small, noise will lead to a lot of false detections.
 * `max_touch` is the maximum height in mm above the surface considered to be a touch.
 
@@ -62,8 +62,8 @@ impl TouchDetector {
         }
     }
 
-    /// Processes one input `frame` resulting in a `touch_signal` (255 for 'touch', 0 otherwise).
-    pub fn process<Frame: DataLen>(&mut self, depth_frame: &Frame, touch_signal: &mut [u8]) {
+    /// Processes one input `depth_frame` resulting in a `touch_signal` (255 for 'touch', 0 otherwise).
+    pub fn process<Frame: Data>(&mut self, depth_frame: &Frame, touch_signal: &mut [u8]) {
         unsafe {
             let p = std::ptr::slice_from_raw_parts(
                 depth_frame.get_p_frame_data(),

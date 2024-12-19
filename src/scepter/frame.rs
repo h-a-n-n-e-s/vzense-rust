@@ -12,8 +12,8 @@ pub type FrameReady = sys::ScFrameReady;
 /// Depth/IR/RGB image frame data.
 pub type Frame = sys::ScFrame;
 
-/// implement trait DataLen to allow use of type Frame in touch_detector
-impl crate::util::touch_detector::DataLen for Frame {
+/// implement trait Data to allow use of type Frame in touch_detector
+impl crate::util::touch_detector::Data for Frame {
     fn get_p_frame_data(&self) -> *mut u8 {
         self.pFrameData
     }
