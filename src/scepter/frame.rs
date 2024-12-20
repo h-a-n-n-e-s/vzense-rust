@@ -22,49 +22,56 @@ impl crate::util::touch_detector::Data for Frame {
     }
 }
 
-/// The available frame types, `Depth` and `RGB` (optical). IR frame is not implemented yet.
+/// The available frame types, `Depth` and `RGB` (optical) and `IR` (infrared)
 pub enum FrameType {
     /// depth
     Depth,
     /// optical
     RGB,
+    /// optical mapped to the depth frame
+    RGBMapped,
+    /// Infrared
+    IR,
 }
 
 /// Captures the next image frame from `device`. This API must be invoked before capturing frame data using `get_frame()`. `max_wait_time_ms` is the maximum waiting time for the next frame in milliseconds. The recommended value is 2 * 1000 / fps. `frame_ready` is a pointer to a buffer storing the signal for the frame availability.
-pub fn read_next_frame(device: Device, max_wait_time_ms: u16, frame_ready: &mut FrameReady) {
+pub fn read_next_frame(device: &Device, max_wait_time_ms: u16, frame_ready: &mut FrameReady) {
     unsafe {
-        sys::scGetFrameReady(device, max_wait_time_ms, frame_ready);
+        sys::scGetFrameReady(device.handle, max_wait_time_ms, frame_ready);
     }
 }
 
 /// Returns the image data in `frame` for the current frame from `device`. Before invoking this API, invoke `read_next_frame()` to capture one image frame from the device. `frame_ready` is a pointer to a buffer storing the signal for the frame availability set in `read_next_frame()`. The image `frame_type` is either `FrameType::Depth` or `FrameType::RGB`.
 pub fn get_frame(
-    device: Device,
+    device: &Device,
     frame_ready: &FrameReady,
-    frame_type: FrameType,
+    frame_type: &FrameType,
     frame: &mut Frame,
 ) {
     unsafe {
         match frame_type {
             FrameType::Depth => {
                 if frame_ready.depth() == 1 {
-                    sys::scGetFrame(device, sys::ScFrameType_SC_DEPTH_FRAME, frame);
+                    sys::scGetFrame(device.handle, sys::ScFrameType_SC_DEPTH_FRAME, frame);
+                }
+            }
+            FrameType::IR => {
+                if frame_ready.ir() == 1 {
+                    sys::scGetFrame(device.handle, sys::ScFrameType_SC_IR_FRAME, frame);
                 }
             }
             FrameType::RGB => {
-                // check if rgb is mapped to depth
-                let is_mapped = &mut 0;
-                // sys::scGetTransformDepthImgToColorSensorEnabled(device, is_mapped);
-                sys::scGetTransformColorImgToDepthSensorEnabled(device, is_mapped);
-
-                let rgb_frame_type = match *is_mapped {
-                    0 => sys::ScFrameType_SC_COLOR_FRAME,
-                    // _ => sys::ScFrameType_SC_TRANSFORM_DEPTH_IMG_TO_COLOR_SENSOR_FRAME,
-                    _ => sys::ScFrameType_SC_TRANSFORM_COLOR_IMG_TO_DEPTH_SENSOR_FRAME,
-                };
-
                 if frame_ready.color() == 1 {
-                    sys::scGetFrame(device, rgb_frame_type, frame);
+                    sys::scGetFrame(device.handle, sys::ScFrameType_SC_COLOR_FRAME, frame);
+                }
+            }
+            FrameType::RGBMapped => {
+                if frame_ready.transformedColor() == 1 {
+                    sys::scGetFrame(
+                        device.handle,
+                        sys::ScFrameType_SC_TRANSFORM_COLOR_IMG_TO_DEPTH_SENSOR_FRAME,
+                        frame,
+                    );
                 }
             }
         }
@@ -94,13 +101,27 @@ pub fn get_normalized_depth(
     }
 }
 
+/// Creates `normalized_ir` data array from `frame`.
+pub fn get_normalized_ir(frame: &Frame, min_ir: u8, max_ir: u8, normalized_ir: &mut [u8]) {
+    unsafe {
+        let p = std::ptr::slice_from_raw_parts(frame.pFrameData, frame.dataLen as usize)
+            .as_ref()
+            .unwrap();
+        
+        for (nii, pi) in zip(normalized_ir, p.iter()) {
+            // scale to u8
+            *nii = ((pi - min_ir) as f32 * 255.0 / (max_ir - min_ir) as f32).floor() as u8;
+        }
+    }
+}
+
 /// Creates `bgr` data array from `frame`.
 pub fn get_bgr(frame: &Frame, bgr: &mut [u8]) {
     unsafe {
         let p = std::ptr::slice_from_raw_parts(frame.pFrameData, frame.dataLen as usize)
             .as_ref()
             .unwrap();
-
+        
         for (bgri, pi) in zip(bgr, p) {
             *bgri = *pi;
         }

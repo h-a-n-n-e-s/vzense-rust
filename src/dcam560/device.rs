@@ -9,8 +9,24 @@ use crate::util::{RGBResolution, Resolution, DEFAULT_RESOLUTION};
 
 use super::SESSION_INDEX;
 
-/// Device to connect to.
-pub type Device = sys::PsDeviceHandle;
+/// Device is a wrapper for the raw pointer `handle`
+pub struct Device {
+    pub handle: sys::PsDeviceHandle,
+}
+impl Device {
+    fn open_device_by_uri(uri: *const i8) -> Result<Self, String> {
+        let handle = &mut (0 as sys::PsDeviceHandle);
+        let status = unsafe { sys::Ps2_OpenDevice(uri, handle) };
+        if status != OK {
+            return Err(format!("open device failed with status {}", status));
+        }
+        if !handle.is_null() {
+            Ok(Device { handle: *handle })
+        } else {
+            Err("device ptr is null".to_string())
+        }
+    }
+}
 
 /// Possible depth ranges.
 pub enum DepthRange {
@@ -42,7 +58,7 @@ pub fn init() -> Result<Device, String> {
                 times_tried += 1;
                 // give up after 3 seconds
                 if times_tried == 15 {
-                    return Err(format!("no device found"));
+                    return Err("no device found".to_string());
                 }
                 sleep(Duration::from_millis(200));
             }
@@ -59,13 +75,9 @@ pub fn init() -> Result<Device, String> {
             CStr::from_ptr(ip).to_str().unwrap()
         );
 
-        let device = &mut (0 as sys::PsDeviceHandle);
-        status = sys::Ps2_OpenDevice(uri, device);
-        if status != OK {
-            return Err(format!("open device failed with status {}", status));
-        }
+        let device = Device::open_device_by_uri(uri).unwrap();
 
-        status = sys::Ps2_StartStream(*device, SESSION_INDEX);
+        status = sys::Ps2_StartStream(device.handle, SESSION_INDEX);
         if status != OK {
             return Err(format!("start stream failed with status {}", status));
         } else {
@@ -73,31 +85,35 @@ pub fn init() -> Result<Device, String> {
         }
 
         let data_mode = &mut sys::PsDataMode::default();
-        status = sys::Ps2_GetDataMode(*device, SESSION_INDEX, data_mode);
+        status = sys::Ps2_GetDataMode(device.handle, SESSION_INDEX, data_mode);
         if status != OK {
             return Err(format!("get data mode failed with status {}", status));
         } else {
             println!("data mode: {}", *data_mode);
         }
 
-        Ok(*device)
+        Ok(device)
     }
 }
 
 /// Enable or disable the mapping of RGB image to depth camera space.
-pub fn map_rgb_to_depth(device: Device, is_enabled: bool) {
+pub fn map_rgb_to_depth(device: &Device, is_enabled: bool) {
     let rgb_resolution = get_rgb_resolution(device);
     if rgb_resolution != DEFAULT_RESOLUTION {
         set_rgb_resolution(device, RGBResolution::RGBRes640x480);
     }
     unsafe {
         // should actually be `Ps2_SetMapperEnabledRGBToDepth` but the names seem to be mixed up
-        sys::Ps2_SetMapperEnabledDepthToRGB(device, SESSION_INDEX, if is_enabled { 1 } else { 0 });
+        sys::Ps2_SetMapperEnabledDepthToRGB(
+            device.handle,
+            SESSION_INDEX,
+            if is_enabled { 1 } else { 0 },
+        );
     }
 }
 
 /// Sets the resolution of the rgb frame. Three resolutions are currently available: 640x480, 800x600, and 1600x1200.
-pub fn set_rgb_resolution(device: Device, resolution: RGBResolution) {
+pub fn set_rgb_resolution(device: &Device, resolution: RGBResolution) {
     unsafe {
         let mut resolution = match resolution {
             RGBResolution::RGBRes640x480 => sys::PsResolution_PsRGB_Resolution_640_480,
@@ -108,22 +124,22 @@ pub fn set_rgb_resolution(device: Device, resolution: RGBResolution) {
         // check if rgb is mapped to depth
         let is_mapped = &mut 0;
         // should actually be `Ps2_GetMapperEnabledRGBToDepth` but the names seem to be mixed up
-        sys::Ps2_GetMapperEnabledDepthToRGB(device, SESSION_INDEX, is_mapped);
+        sys::Ps2_GetMapperEnabledDepthToRGB(device.handle, SESSION_INDEX, is_mapped);
 
         if *is_mapped == 1 {
             resolution = sys::PsResolution_PsRGB_Resolution_640_480;
             println!("setting of rgb resolution is ignored because rgb frame is mapped to depth")
         }
 
-        sys::Ps2_SetRGBResolution(device, SESSION_INDEX, resolution);
+        sys::Ps2_SetRGBResolution(device.handle, SESSION_INDEX, resolution);
     }
 }
 
 /// Returns the resolution of the rgb frame.
-pub fn get_rgb_resolution(device: Device) -> Resolution {
+pub fn get_rgb_resolution(device: &Device) -> Resolution {
     let resolution_type = &mut 0;
     unsafe {
-        sys::Ps2_GetRGBResolution(device, SESSION_INDEX, resolution_type);
+        sys::Ps2_GetRGBResolution(device.handle, SESSION_INDEX, resolution_type);
     }
     match *resolution_type {
         2 => Resolution::new(640, 480),
@@ -134,27 +150,27 @@ pub fn get_rgb_resolution(device: Device) -> Resolution {
 }
 
 /// Sets the depth range mode.
-pub fn set_depth_measuring_range_dcam560(device: Device, depth_range: DepthRange) {
+pub fn set_depth_measuring_range_dcam560(device: &Device, depth_range: DepthRange) {
     let depth_range = match depth_range {
         DepthRange::Near => 0,
         DepthRange::Mid => 1,
         DepthRange::Far => 2,
     };
     unsafe {
-        sys::Ps2_SetDepthRange(device, SESSION_INDEX, depth_range);
+        sys::Ps2_SetDepthRange(device.handle, SESSION_INDEX, depth_range);
     }
 }
 
 /// Returns the current measuring range `(min, max)` of the camera in mm
-pub fn get_depth_measuring_range(device: Device) -> (u16, u16) {
+pub fn get_depth_measuring_range(device: &Device) -> (u16, u16) {
     unsafe {
         let depth_range = &mut sys::PsDepthRange::default();
 
-        sys::Ps2_GetDepthRange(device, SESSION_INDEX, depth_range);
+        sys::Ps2_GetDepthRange(device.handle, SESSION_INDEX, depth_range);
 
         let mr = &mut sys::PsMeasuringRange::default();
 
-        sys::Ps2_GetMeasuringRange(device, SESSION_INDEX, *depth_range, mr);
+        sys::Ps2_GetMeasuringRange(device.handle, SESSION_INDEX, *depth_range, mr);
 
         match *depth_range {
             0 => (mr.effectDepthMinNear, mr.effectDepthMaxNear),
@@ -168,8 +184,8 @@ pub fn get_depth_measuring_range(device: Device) -> (u16, u16) {
 /// Stops the stream, closes the device, and clears all resources.
 pub fn shut_down(device: &mut Device) {
     unsafe {
-        sys::Ps2_StopStream(*device, SESSION_INDEX);
-        sys::Ps2_CloseDevice(device);
+        sys::Ps2_StopStream(device.handle, SESSION_INDEX);
+        sys::Ps2_CloseDevice(&mut device.handle);
 
         let status = sys::Ps2_Shutdown();
         if status != OK {

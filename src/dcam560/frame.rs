@@ -30,42 +30,74 @@ pub enum FrameType {
     Depth,
     /// optical
     RGB,
+    /// optical mapped to the depth frame
+    RGBMapped,
 }
 
 /// Captures the next image frame from `device`. This API must be invoked before capturing frame data using `get_frame()`. `frame_ready` is a pointer to a buffer storing the signal for the frame availability.
-pub fn read_next_frame(device: Device, frame_ready: &mut FrameReady) {
+pub fn read_next_frame(device: &Device, frame_ready: &mut FrameReady) {
     unsafe {
-        sys::Ps2_ReadNextFrame(device, SESSION_INDEX, frame_ready);
+        sys::Ps2_ReadNextFrame(device.handle, SESSION_INDEX, frame_ready);
     }
 }
 
 /// Returns the image data in `frame` for the current frame from `device`. Before invoking this API, invoke `read_next_frame()` to capture one image frame from the device. `frame_ready` is a pointer to a buffer storing the signal for the frame availability set in `read_next_frame()`. The image `frame_type` is either `FrameType::Depth` or `FrameType::RGB`.
 pub fn get_frame(
-    device: Device,
+    device: &Device,
     frame_ready: &FrameReady,
-    frame_type: FrameType,
+    frame_type: &FrameType,
     frame: &mut Frame,
 ) {
     unsafe {
         match frame_type {
             FrameType::Depth => {
                 if frame_ready.depth() == 1 {
-                    sys::Ps2_GetFrame(device, SESSION_INDEX, sys::PsFrameType_PsDepthFrame, frame);
+                    sys::Ps2_GetFrame(
+                        device.handle,
+                        SESSION_INDEX,
+                        sys::PsFrameType_PsDepthFrame,
+                        frame,
+                    );
                 }
             }
             FrameType::RGB => {
                 // check if rgb is mapped to depth
-                let is_mapped = &mut 0;
+                // let is_mapped = &mut 0;
                 // should actually be `Ps2_GetMapperEnabledRGBToDepth` but the names seem to be mixed up
-                sys::Ps2_GetMapperEnabledDepthToRGB(device, SESSION_INDEX, is_mapped);
+                // sys::Ps2_GetMapperEnabledDepthToRGB(device.handle, SESSION_INDEX, is_mapped);
 
-                let rgb_frame_type = match *is_mapped {
-                    0 => sys::PsFrameType_PsRGBFrame,
-                    _ => sys::PsFrameType_PsMappedRGBFrame,
-                };
+                // let rgb_frame_type = match *is_mapped {
+                //     0 => sys::PsFrameType_PsRGBFrame,
+                //     _ => sys::PsFrameType_PsMappedRGBFrame,
+                // };
 
                 if frame_ready.rgb() == 1 {
-                    sys::Ps2_GetFrame(device, SESSION_INDEX, rgb_frame_type, frame);
+                    sys::Ps2_GetFrame(
+                        device.handle,
+                        SESSION_INDEX,
+                        sys::PsFrameType_PsRGBFrame,
+                        frame,
+                    );
+                }
+            }
+            FrameType::RGBMapped => {
+                // check if rgb is mapped to depth
+                // let is_mapped = &mut 0;
+                // should actually be `Ps2_GetMapperEnabledRGBToDepth` but the names seem to be mixed up
+                // sys::Ps2_GetMapperEnabledDepthToRGB(device.handle, SESSION_INDEX, is_mapped);
+
+                // let rgb_frame_type = match *is_mapped {
+                //     0 => sys::PsFrameType_PsRGBFrame,
+                //     _ => sys::PsFrameType_PsMappedRGBFrame,
+                // };
+
+                if frame_ready.mappedRGB() == 1 {
+                    sys::Ps2_GetFrame(
+                        device.handle,
+                        SESSION_INDEX,
+                        sys::PsFrameType_PsMappedRGBFrame,
+                        frame,
+                    );
                 }
             }
         }
