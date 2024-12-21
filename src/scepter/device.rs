@@ -84,7 +84,6 @@ pub fn map_rgb_to_depth(device: &Device, is_enabled: bool) {
         set_rgb_resolution(device, RGBResolution::RGBRes640x480);
     }
     unsafe {
-        // sys::scSetTransformDepthImgToColorSensorEnabled(device, if is_enabled { 1 } else { 0 });
         sys::scSetTransformColorImgToDepthSensorEnabled(
             device.handle,
             if is_enabled { 1 } else { 0 },
@@ -97,7 +96,6 @@ pub fn set_rgb_resolution(device: &Device, resolution: RGBResolution) {
     unsafe {
         // check if rgb is mapped to depth
         let is_mapped = &mut 0;
-        // sys::scGetTransformDepthImgToColorSensorEnabled(device, is_mapped);
         sys::scGetTransformColorImgToDepthSensorEnabled(device.handle, is_mapped);
         if *is_mapped == 1 && resolution != RGBResolution::RGBRes640x480 {
             sys::scSetColorResolution(device.handle, 640, 480);

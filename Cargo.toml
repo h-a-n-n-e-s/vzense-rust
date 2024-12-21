@@ -23,8 +23,8 @@ dcam560 = []
 # recreates the bindings for vzense-sys
 run-bindgen = ["vzense-sys/run-bindgen"]
 
-[profile.dev]
-rpath = true
+# [profile.dev]
+# rpath = true
 
-[profile.release]
-rpath = true
+# [profile.release]
+# rpath = true

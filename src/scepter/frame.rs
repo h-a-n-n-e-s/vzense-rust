@@ -67,13 +67,19 @@ pub fn get_frame(
             }
             FrameType::RGBMapped => {
                 if frame_ready.transformedColor() == 1 {
-                    sys::scGetFrame(
+                    let status = sys::scGetFrame(
                         device.handle,
                         sys::ScFrameType_SC_TRANSFORM_COLOR_IMG_TO_DEPTH_SENSOR_FRAME,
                         frame,
                     );
+                    if status != sys::ScStatus_SC_OK {
+                        panic!("get_frame failded with status {}", status);
+                    }
                 }
             }
+        }
+        if frame.pFrameData.is_null() {
+            panic!("frame pointer is NULL!");
         }
     }
 }
@@ -107,7 +113,7 @@ pub fn get_normalized_ir(frame: &Frame, min_ir: u8, max_ir: u8, normalized_ir: &
         let p = std::ptr::slice_from_raw_parts(frame.pFrameData, frame.dataLen as usize)
             .as_ref()
             .unwrap();
-        
+
         for (nii, pi) in zip(normalized_ir, p.iter()) {
             // scale to u8
             *nii = ((pi - min_ir) as f32 * 255.0 / (max_ir - min_ir) as f32).floor() as u8;
@@ -121,7 +127,7 @@ pub fn get_bgr(frame: &Frame, bgr: &mut [u8]) {
         let p = std::ptr::slice_from_raw_parts(frame.pFrameData, frame.dataLen as usize)
             .as_ref()
             .unwrap();
-        
+
         for (bgri, pi) in zip(bgr, p) {
             *bgri = *pi;
         }
