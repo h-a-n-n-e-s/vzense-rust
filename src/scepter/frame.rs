@@ -48,34 +48,34 @@ pub fn get_frame(
     frame_type: &FrameType,
     frame: &mut Frame,
 ) {
-    unsafe {
-        match frame_type {
-            FrameType::Depth => {
-                if frame_ready.depth() == 1 {
-                    sys::scGetFrame(device.handle, sys::ScFrameType_SC_DEPTH_FRAME, frame);
-                }
+    let mut ft: Option<sys::ScFrameType> = None;
+    match frame_type {
+        FrameType::Depth => {
+            if frame_ready.depth() == 1 {
+                ft = Some(sys::ScFrameType_SC_DEPTH_FRAME);
             }
-            FrameType::IR => {
-                if frame_ready.ir() == 1 {
-                    sys::scGetFrame(device.handle, sys::ScFrameType_SC_IR_FRAME, frame);
-                }
+        }
+        FrameType::IR => {
+            if frame_ready.ir() == 1 {
+                ft = Some(sys::ScFrameType_SC_IR_FRAME);
             }
-            FrameType::RGB => {
-                if frame_ready.color() == 1 {
-                    sys::scGetFrame(device.handle, sys::ScFrameType_SC_COLOR_FRAME, frame);
-                }
+        }
+        FrameType::RGB => {
+            if frame_ready.color() == 1 {
+                ft = Some(sys::ScFrameType_SC_COLOR_FRAME);
             }
-            FrameType::RGBMapped => {
-                if frame_ready.transformedColor() == 1 {
-                    let status = sys::scGetFrame(
-                        device.handle,
-                        sys::ScFrameType_SC_TRANSFORM_COLOR_IMG_TO_DEPTH_SENSOR_FRAME,
-                        frame,
-                    );
-                    if status != sys::ScStatus_SC_OK {
-                        panic!("get_frame failded with status {}", status);
-                    }
-                }
+        }
+        FrameType::RGBMapped => {
+            if frame_ready.transformedColor() == 1 {
+                ft = Some(sys::ScFrameType_SC_TRANSFORM_COLOR_IMG_TO_DEPTH_SENSOR_FRAME);
+            }
+        }
+    }
+    if let Some(ft) = ft {
+        unsafe {
+            let status = sys::scGetFrame(device.handle, ft, frame);
+            if status != sys::ScStatus_SC_OK {
+                panic!("get_frame failded with status {}", status);
             }
         }
         if frame.pFrameData.is_null() {

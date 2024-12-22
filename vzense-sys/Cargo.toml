@@ -9,7 +9,7 @@ license = "MIT"
 authors = ["Johannes Schoenke"]
 
 [build-dependencies]
-bindgen = {version = "0.70.1", optional = true}
+bindgen = {version = "0.71.1", optional = true}
 
 [features]
 # uses the already created bindings
