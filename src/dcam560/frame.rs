@@ -14,16 +14,6 @@ pub type FrameReady = sys::PsFrameReady;
 /// Depth/IR/RGB image frame data.
 pub type Frame = sys::PsFrame;
 
-/// implement trait Data to allow use of type Frame in touch_detector
-impl crate::util::touch_detector::Data for Frame {
-    fn get_p_frame_data(&self) -> *mut u8 {
-        self.pFrameData
-    }
-    fn get_data_len(&self) -> usize {
-        self.dataLen as usize
-    }
-}
-
 /// The available frame types, `Depth` and `RGB` (optical). IR frame is not implemented yet.
 pub enum FrameType {
     /// depth

@@ -6,8 +6,10 @@ use super::new_fixed_vec;
 
 /// to allow invocation of generic type Frame
 pub trait Data {
-    fn get_p_frame_data(&self) -> *mut u8;
-    fn get_data_len(&self) -> usize;
+    fn get_frame_p_frame_data(&self) -> *mut u8;
+    fn get_frame_data_len(&self) -> usize;
+    fn get_min_depth_mm(&self) -> u16;
+    fn get_max_depth_mm(&self) -> u16;
 }
 
 /**
@@ -37,9 +39,8 @@ pub struct TouchDetector {
 }
 impl TouchDetector {
     /// Creates a new instance with the specified parameters. All length parameters are in mm.
-    pub fn new(
-        min_depth: u16,
-        max_depth: u16,
+    pub fn new<Device: Data>(
+        device: &Device,
         min_touch: f32,
         max_touch: f32,
         baseline_sample_size: usize,
@@ -47,8 +48,8 @@ impl TouchDetector {
         pixel_count: usize,
     ) -> Self {
         Self {
-            min_depth,
-            max_depth,
+            min_depth: device.get_min_depth_mm(),
+            max_depth: device.get_max_depth_mm(),
             min_touch,
             max_touch,
             pixel_count,
@@ -63,11 +64,11 @@ impl TouchDetector {
     }
 
     /// Processes one input `depth_frame` resulting in a `touch_signal` (255 for 'touch', 0 otherwise).
-    pub fn process<Frame: Data>(&mut self, depth_frame: &Frame, touch_signal: &mut [u8]) {
+    pub fn process<Device: Data>(&mut self, device: &Device, touch_signal: &mut [u8]) {
         unsafe {
             let p = std::ptr::slice_from_raw_parts(
-                depth_frame.get_p_frame_data(),
-                depth_frame.get_data_len(),
+                device.get_frame_p_frame_data(),
+                device.get_frame_data_len(),
             )
             .as_ref()
             .unwrap();

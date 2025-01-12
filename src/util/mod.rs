@@ -2,19 +2,28 @@ pub mod color_map;
 pub mod touch_detector;
 
 use std::{
+    io::Write,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
     thread::JoinHandle,
+    time::Instant,
 };
+
+/// Image formats.
+pub enum Format {
+    Mono,
+    Rgb,
+    Bgr,
+}
 
 /// Possible RGB resolutions.
 #[derive(PartialEq)]
-pub enum RGBResolution {
-    RGBRes640x480,
-    RGBRes800x600,
-    RGBRes1600x1200,
+pub enum ColorResolution {
+    Res640x480,
+    Res800x600,
+    Res1600x1200,
 }
 
 #[derive(PartialEq)]
@@ -46,7 +55,7 @@ impl Resolution {
     }
 }
 
-/// For the Depth and IR frames, the resolution is fixed to 640x480 for all data modes. The rgb frame can be set to higher resolutions using `set_rgb_resolution()`, but the defaults is also 640x480.
+/// For the Depth and IR frames, the resolution is fixed to 640x480 for all data modes. The color frame can be set to higher resolutions using `set_color_resolution()`, but the defaults is also 640x480.
 pub const DEFAULT_RESOLUTION: Resolution = Resolution::new(640, 480);
 pub const DEFAULT_PIXEL_COUNT: usize = DEFAULT_RESOLUTION.to_pixel_count();
 
@@ -93,5 +102,35 @@ impl KeyboardEvent {
     /// Join with the main thread.
     pub fn join(self) {
         self.thread.join().unwrap();
+    }
+}
+
+/// A counter to be used in the main loop to get fps and frame count info. The `print_fps_frame_count_info()` function will be called every `info_interval`th loop.
+pub struct Counter {
+    count: u64,
+    now: Instant,
+    info_interval: u64,
+}
+impl Counter {
+    pub fn new(info_interval: u64) -> Self {
+        Self {
+            count: 0,
+            now: Instant::now(),
+            info_interval,
+        }
+    }
+
+    pub fn print_fps_frame_count_info(&mut self) {
+        self.count += 1;
+        if self.count % self.info_interval == 0 {
+            let elapsed = self.now.elapsed().as_secs_f64();
+            self.now = Instant::now();
+            print!(
+                "  fps: {:.1}  frame: {}\r",
+                self.info_interval as f64 / elapsed,
+                self.count
+            );
+            std::io::stdout().flush().unwrap();
+        }
     }
 }

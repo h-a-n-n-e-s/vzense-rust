@@ -5,10 +5,8 @@ This example covers all the functionality provided by the library. It connects t
 // by default using the newest Scepter API
 #[cfg(not(feature = "dcam560"))]
 use vzense_rust::scepter::{
-    device::{get_rgb_resolution, init, map_rgb_to_depth, set_rgb_resolution, shut_down},
-    frame::{
-        get_bgr, get_frame, get_normalized_depth, read_next_frame, Frame, FrameReady, FrameType,
-    },
+    device::{ColorFormat, Device},
+    frame::{get_frame, read_next_frame, FrameType},
 };
 
 // uses the older API specifically for the DCAM560 model
@@ -25,18 +23,15 @@ use vzense_rust::dcam560::{
 };
 
 use vzense_rust::util::{
-    color_map::TURBO, new_fixed_vec, touch_detector::TouchDetector, KeyboardEvent, RGBResolution,
-    Resolution, DEFAULT_PIXEL_COUNT, DEFAULT_RESOLUTION,
+    color_map::TURBO, new_fixed_vec, touch_detector::TouchDetector, ColorResolution, Counter,
+    Format, KeyboardEvent, Resolution, DEFAULT_PIXEL_COUNT, DEFAULT_RESOLUTION,
 };
-
-use show_image::{ImageInfo, ImageView, WindowOptions, WindowProxy};
-use std::{io::Write, time::Instant};
 
 #[show_image::main]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     //
     // Looking for a device. If a device has been found, it will be opened and a stream started.
-    let mut device = match init() {
+    let mut device = match Device::init() {
         Ok(d) => d,
         Err(msg) => {
             println!("{}", msg);
@@ -44,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    // choosing the depth measuring range for DCAM560 (Near, Mid, or Far)
+    // Choosing the depth measuring range for DCAM560 (Near, Mid, or Far)
     #[cfg(feature = "dcam560")]
     {
         set_depth_measuring_range_dcam560(&device, DepthRange::Mid);
@@ -53,100 +48,90 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("depth measuring range: {} mm to {} mm", range.0, range.1);
     }
 
-    // choosing the min/max depth in mm for the color mapping of the depth output. These values also bound the depths used in the `TochDetector` to reduce measuring artifacts. In the specs the depth measuring range for the NYX650 is given as min: 300 mm, max: 4500 mm. The depth measuring range for the DCAM560 depends on the range chosen above.
-    let (min_depth, max_depth) = (500, 1500);
+    // Choosing the min/max depth in mm for the color mapping of the depth output. These values also bound the depths used in the `TochDetector` to reduce measuring artifacts. In the specs the depth measuring range for the NYX650 is given as min: 300 mm, max: 4500 mm. The depth measuring range for the DCAM560 depends on the range chosen above.
+    device.set_depth_range(500, 1000);
 
-    let mut touch_detector =
-        TouchDetector::new(min_depth, max_depth, 5.0, 50.0, 30, 10, DEFAULT_PIXEL_COUNT);
+    let mut touch_detector = TouchDetector::new(&device, 5.0, 50.0, 30, 5, DEFAULT_PIXEL_COUNT);
 
-    // Setting the rgb resolution. If not set the default will be 640x480.
+    // Setting the color resolution. If not set the default will be 640x480.
     // If mapper is set to true, resolution setting will be ignored and reverted to 640x480.
-    set_rgb_resolution(&device, RGBResolution::RGBRes640x480);
+    device.set_color_resolution(ColorResolution::Res640x480);
 
-    let mut rgb_frame_type = FrameType::RGB;
+    // The normal color frame Type. Might be reset below if mapped.
+    let mut color_frame_type = FrameType::Color;
 
-    // If map_rgb is set to true rgb_resolution is reset to 640x480.
-    let map_rgb = true;
-    if map_rgb {
-        rgb_frame_type = FrameType::RGBMapped;
-        map_rgb_to_depth(&device, map_rgb);
+    // If map_color is set to true color_resolution is reset to 640x480.
+    let map_color = true;
+    if map_color {
+        color_frame_type = FrameType::ColorMapped;
+        device.map_color_to_depth(map_color);
     }
 
-    let rgb_resolution = get_rgb_resolution(&device);
+    let color_resolution = device.get_color_resolution();
 
-    let signal = &mut new_fixed_vec(DEFAULT_PIXEL_COUNT, 0u8);
-    let out = &mut new_fixed_vec(3 * DEFAULT_PIXEL_COUNT, 0u8);
-    let bgr = &mut new_fixed_vec(3 * rgb_resolution.to_pixel_count(), 0u8);
+    // Choose between RGB and BGR color format, default is BGR.
+    device.set_color_format(ColorFormat::Rgb);
+
+    // vectors to store image data
+    let mut signal = new_fixed_vec(DEFAULT_PIXEL_COUNT, 0u8); // 8 bit per pixel
+    let mut rgb = new_fixed_vec(3 * DEFAULT_PIXEL_COUNT, 0u8); // 24 bit per pixel
 
     // creating the image windows, `double()` doubles the size of the window in both dimensions
     let depth_window = create_window("depth", &DEFAULT_RESOLUTION.double(), true);
     let touch_window = create_window("touch", &DEFAULT_RESOLUTION.double(), true);
-    let rgb_window = create_window("rgb", &rgb_resolution.double(), true);
+    let color_window = create_window("color", &color_resolution.double(), true);
 
     let stop = KeyboardEvent::new("\n");
 
-    let frame_ready = &mut FrameReady::default();
-    let frame = &mut Frame::default();
+    let mut counter = Counter::new(10);
 
-    let mut count = 0;
-    let mut now = Instant::now();
     let mut init = true;
 
+    ///////////////////////////////////////////////////////////////////////////
     // main loop reading frames and displaying them
     loop {
         // Scepter API has an additional `max_wait_time_ms` paramter
         #[cfg(not(feature = "dcam560"))]
-        read_next_frame(&device, 1200, frame_ready);
+        read_next_frame(&mut device, 1200);
 
         #[cfg(feature = "dcam560")]
         read_next_frame(&device, frame_ready);
 
-        // depth __________________________________________
+        // depth ______________________________________________________________
 
-        get_frame(&device, frame_ready, &FrameType::Depth, frame);
-
-        get_normalized_depth(frame, min_depth, max_depth, signal);
+        get_frame(&mut device, &FrameType::Depth, &mut signal);
         // touch_detector.get_normalized_average_depth(signal);
 
-        // apply color map
+        // apply Google's Turbo color map
         for (i, si) in signal.iter().enumerate() {
-            let rgb = &TURBO[*si as usize];
-            out[3 * i..3 * i + 3].copy_from_slice(rgb);
+            rgb[3 * i..3 * i + 3].copy_from_slice(&TURBO[*si as usize]);
         }
 
-        update_window(&depth_window, &DEFAULT_RESOLUTION, out, Format::RGB);
+        update_window(&depth_window, &DEFAULT_RESOLUTION, &rgb, Format::Rgb);
 
-        // touch detector _________________________________
+        // touch detector _____________________________________________________
 
-        touch_detector.process(frame, signal);
+        // the input signal should be depth data, otherwise funny things might happen...
+        touch_detector.process(&device, &mut signal);
 
-        update_window(&touch_window, &DEFAULT_RESOLUTION, signal, Format::Mono);
+        update_window(&touch_window, &DEFAULT_RESOLUTION, &signal, Format::Mono);
 
-        // rgb ____________________________________________
+        // color ________________________________________________________________
 
-        get_frame(&device, frame_ready, &rgb_frame_type, frame);
+        get_frame(&mut device, &color_frame_type, &mut rgb);
 
         if init {
             init = false;
-            // check_pixel_count(frame, bgr.len() / 3);
-            println!("frame info: {:?}", frame);
+            device.check_pixel_count(rgb.len() / 3);
+            println!("frame info: {:?}", device.get_frame_info());
             println!("press Enter to quit")
         }
 
-        get_bgr(frame, bgr);
+        update_window(&color_window, &color_resolution, &rgb, Format::Rgb);
 
-        update_window(&rgb_window, &rgb_resolution, bgr, Format::BGR);
+        //_____________________________________________________________________
 
-        // fps and counter info ___________________________
-
-        count += 1;
-
-        if count % 10 == 0 {
-            let elapsed = now.elapsed().as_secs_f32();
-            now = Instant::now();
-            print!("  fps: {:.1}  frame: {}\r", 10.0 / elapsed, count);
-            std::io::stdout().flush().unwrap();
-        }
+        counter.print_fps_frame_count_info();
 
         if stop.key_was_pressed() {
             break;
@@ -155,22 +140,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     stop.join();
 
-    shut_down(&mut device);
+    device.shut_down();
 
     Ok(())
 }
 
-enum Format {
-    Mono,
-    RGB,
-    BGR,
-}
+// helper functions using the show_image crate ////////////////////////////////
+
+use show_image::{ImageInfo, ImageView, WindowOptions, WindowProxy};
+
 fn update_window(window: &WindowProxy, resolution: &Resolution, data: &[u8], format: Format) {
     let (w, h) = resolution.to_tuple();
     let info = match format {
         Format::Mono => ImageInfo::mono8(w, h),
-        Format::RGB => ImageInfo::rgb8(w, h),
-        Format::BGR => ImageInfo::bgr8(w, h),
+        Format::Rgb => ImageInfo::rgb8(w, h),
+        Format::Bgr => ImageInfo::bgr8(w, h),
     };
     let image = ImageView::new(info, data);
     window.set_image("image", image).unwrap();

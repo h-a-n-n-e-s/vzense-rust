@@ -5,7 +5,7 @@ use std::{ffi::CStr, thread::sleep, time::Duration};
 use sys::PsReturnStatus_PsRetOK as OK;
 use vzense_sys::dcam560 as sys;
 
-use crate::util::{RGBResolution, Resolution, DEFAULT_RESOLUTION};
+use crate::util::{ColorResolution, Resolution, DEFAULT_RESOLUTION};
 
 use super::SESSION_INDEX;
 
@@ -100,7 +100,7 @@ pub fn init() -> Result<Device, String> {
 pub fn map_rgb_to_depth(device: &Device, is_enabled: bool) {
     let rgb_resolution = get_rgb_resolution(device);
     if rgb_resolution != DEFAULT_RESOLUTION {
-        set_rgb_resolution(device, RGBResolution::RGBRes640x480);
+        set_rgb_resolution(device, ColorResolution::Res640x480);
     }
     unsafe {
         // should actually be `Ps2_SetMapperEnabledRGBToDepth` but the names seem to be mixed up
@@ -113,12 +113,12 @@ pub fn map_rgb_to_depth(device: &Device, is_enabled: bool) {
 }
 
 /// Sets the resolution of the rgb frame. Three resolutions are currently available: 640x480, 800x600, and 1600x1200.
-pub fn set_rgb_resolution(device: &Device, resolution: RGBResolution) {
+pub fn set_rgb_resolution(device: &Device, resolution: ColorResolution) {
     unsafe {
         let mut resolution = match resolution {
-            RGBResolution::RGBRes640x480 => sys::PsResolution_PsRGB_Resolution_640_480,
-            RGBResolution::RGBRes800x600 => sys::PsResolution_PsRGB_Resolution_800_600,
-            RGBResolution::RGBRes1600x1200 => sys::PsResolution_PsRGB_Resolution_1600_1200,
+            ColorResolution::Res640x480 => sys::PsResolution_PsRGB_Resolution_640_480,
+            ColorResolution::Res800x600 => sys::PsResolution_PsRGB_Resolution_800_600,
+            ColorResolution::Res1600x1200 => sys::PsResolution_PsRGB_Resolution_1600_1200,
         };
 
         // check if rgb is mapped to depth
