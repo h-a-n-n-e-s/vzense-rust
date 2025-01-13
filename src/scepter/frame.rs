@@ -52,8 +52,6 @@ pub fn get_frame(device: &mut Device, frame_type: &FrameType, out: &mut [u8]) {
     }
     if let Some(ft) = ft {
         unsafe {
-            // let f: *mut Frame = &mut Frame::default();
-
             let status = sys::scGetFrame(device.handle, ft, &mut device.frame);
             if status != sys::ScStatus_SC_OK {
                 panic!("get_frame failed with status {}", status);
@@ -106,7 +104,7 @@ fn get_normalized_ir(device: &Device, min_ir: u8, max_ir: u8, normalized_ir: &mu
     }
 }
 
-/// Creates `bgr` data array from `frame`.
+/// Creates `color` data array from `frame`.
 fn get_bgr(device: &Device, color: &mut [u8]) {
     unsafe {
         let p =

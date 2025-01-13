@@ -6,7 +6,7 @@ use sys::{
     scSetColorPixelFormat, ScPixelFormat_SC_PIXEL_FORMAT_BGR_888,
     ScPixelFormat_SC_PIXEL_FORMAT_RGB_888,
 };
-use vzense_sys::scepter as sys;
+use vzense_sys::scepter::{self as sys, scGetFirmwareVersion};
 
 use crate::util::{ColorResolution, Resolution, DEFAULT_RESOLUTION};
 
@@ -33,12 +33,12 @@ impl Device {
                 return Err(format!("initialization failed with status {}", status));
             }
             let device_count = &mut 0;
-            println!("searching for device...");
+            println!("searching for device... ");
             status = sys::scGetDeviceCount(device_count, 3000);
             if status != OK {
                 return Err(format!("get device count failed with status {}", status));
             } else if *device_count > 0 {
-                print!("device found, ");
+                println!("device found");
             } else {
                 return Err("no device found".to_string());
             }
@@ -48,11 +48,6 @@ impl Device {
             sys::scGetDeviceInfoList(*device_count, device_info);
             let ip = device_info.ip.as_ptr();
             let model = device_info.productName.as_ptr();
-            println!(
-                "model: {}, IP: {}",
-                CStr::from_ptr(model).to_str().unwrap(),
-                CStr::from_ptr(ip).to_str().unwrap()
-            );
 
             // Valgrind gets stuck between these two huis
             // println!("----------------------------------------------hui1");
@@ -61,19 +56,36 @@ impl Device {
 
             // println!("----------------------------------------------hui2");
 
-            status = sys::scStartStream(device.handle);
+            let mut firmware = [0; 64];
+            status = scGetFirmwareVersion(device.handle, firmware.as_mut_ptr(), 64);
             if status != OK {
-                return Err(format!("start stream failed with status {}", status));
-            } else {
-                println!("stream started");
+                return Err(format!(
+                    "get firmware version failed with status {}",
+                    status
+                ));
             }
+
+            println!(
+                "model: {}, IP: {}, firmware: {}",
+                CStr::from_ptr(model).to_str().unwrap(),
+                CStr::from_ptr(ip).to_str().unwrap(),
+                CStr::from_bytes_until_nul(std::mem::transmute::<&[i8], &[u8]>(&firmware))
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+            );
 
             let work_mode = &mut sys::ScWorkMode::default();
             status = sys::scGetWorkMode(device.handle, work_mode);
             if status != OK {
                 return Err(format!("get work mode failed with status {}", status));
+            }
+
+            status = sys::scStartStream(device.handle);
+            if status != OK {
+                return Err(format!("start stream failed with status {}", status));
             } else {
-                println!("work mode: {}", *work_mode);
+                println!("stream started, work mode: {}", *work_mode);
             }
 
             Ok(device)
@@ -93,12 +105,9 @@ impl Device {
     pub fn check_pixel_count(&self, pixel_count: usize) {
         let w = self.frame.width as usize;
         let h = self.frame.height as usize;
-        assert!(
-            w * h == pixel_count,
-            "pixel count is not equal to {} * {}",
-            w,
-            h
-        );
+        if w * h != pixel_count {
+            println!("!!! pixel count is not equal to {} * {}", w, h)
+        }
     }
 
     /// Enable or disable the mapping of the color image to depth camera space.
