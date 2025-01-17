@@ -63,15 +63,23 @@ impl TouchDetector {
         }
     }
 
-    /// Processes one input `depth_frame` resulting in a `touch_signal` (255 for 'touch', 0 otherwise).
-    pub fn process<Device: Data>(&mut self, device: &Device, touch_signal: &mut [u8]) {
+    /// Processes one input `depth_frame` resulting in a `touch_signal` (255 for 'touch', 0 otherwise) and a `distance` from the initially measured depth.
+    pub fn process<Device: Data>(
+        &mut self,
+        device: &Device,
+        touch_signal: &mut [u8],
+        distance: &mut [f32],
+    ) {
         unsafe {
-            let p = std::ptr::slice_from_raw_parts(
+            let p = match std::ptr::slice_from_raw_parts(
                 device.get_frame_p_frame_data(),
                 device.get_frame_data_len(),
             )
             .as_ref()
-            .unwrap();
+            {
+                Some(ptr) => ptr,
+                None => return,
+            };
 
             for (i, pi) in p.chunks_exact(2).enumerate() {
                 // create one u16 from two consecutive u8 and clamp to measuring range
@@ -101,6 +109,8 @@ impl TouchDetector {
                 } else {
                     0
                 };
+
+                distance[i] = diff;
             }
         }
         self.sample = (self.sample + 1) % self.sample_size;
@@ -117,5 +127,14 @@ impl TouchDetector {
             *adi = ((d - self.min_depth as f32) * 255.0 / (self.max_depth - self.min_depth) as f32)
                 .floor() as u8;
         }
+    }
+
+    /// The baseline depth as the average of the first baseline_sample_size frames
+    pub fn get_baseline(&self) -> Vec<f32> {
+        let mut base_line = new_fixed_vec(self.baseline_depth_sum.len(), 0.0);
+        for (a, b) in zip(self.baseline_depth_sum.as_slice(), base_line.as_mut_slice()) {
+            *b = *a as f32 / self.baseline_sample_size as f32;
+        }
+        base_line
     }
 }

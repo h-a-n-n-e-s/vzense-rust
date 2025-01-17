@@ -74,6 +74,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // vectors to store image data
     let mut signal = new_fixed_vec(DEFAULT_PIXEL_COUNT, 0u8); // 8 bit per pixel
+    let mut distance = new_fixed_vec(DEFAULT_PIXEL_COUNT, 0.0f32); // 32 bit per pixel
     let mut rgb = new_fixed_vec(3 * DEFAULT_PIXEL_COUNT, 0u8); // 24 bit per pixel
 
     // creating the image windows, `double()` doubles the size of the window in both dimensions
@@ -111,8 +112,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // touch detector _____________________________________________________
 
-        // the input signal should be depth data, otherwise funny things might happen...
-        touch_detector.process(&device, &mut signal);
+        // the last get_frame() call before this should have FrameType::Depth
+        touch_detector.process(&device, &mut signal, &mut distance);
 
         update_window(&touch_window, &DEFAULT_RESOLUTION, &signal, Format::Mono);
 
