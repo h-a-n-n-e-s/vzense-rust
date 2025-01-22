@@ -19,10 +19,15 @@ pub enum FrameType {
 }
 
 /// Captures the next image frame from `device`. This API must be invoked before capturing frame data using `get_frame()`. `max_wait_time_ms` is the maximum waiting time for the next frame in milliseconds. The recommended value is 2 * 1000 / fps. `frame_ready` is a pointer to a buffer storing the signal for the frame availability.
-pub fn read_next_frame(device: &mut Device, max_wait_time_ms: u16) {
+pub fn read_next_frame(device: &mut Device, max_wait_time_ms: u16) -> i32 {
     unsafe {
-        sys::scGetFrameReady(device.handle, max_wait_time_ms, &mut device.frame_ready);
+        let status = sys::scGetFrameReady(device.handle, max_wait_time_ms, &mut device.frame_ready);
+        if status != sys::ScStatus_SC_OK {
+            println!("vzense_rust: read_next_frame failed with status {}", status);
+            return status;
+        }
     }
+    0
 }
 
 /// Returns the image data in `frame` for the current frame from `device`. Before invoking this API, invoke `read_next_frame()` to capture one image frame from the device. `frame_ready` is a pointer to a buffer storing the signal for the frame availability set in `read_next_frame()`.
