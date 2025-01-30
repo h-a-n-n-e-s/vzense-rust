@@ -1,0 +1,10 @@
+string enum from bindgen?
+https://github.com/rustwasm/wasm-bindgen/issues/3057
+https://users.rust-lang.org/t/how-to-display-constants-as-its-name-for-rust-when-debug/96829
+
+get_rgb()
+
+include distance in touch detector output
+
+sdk doc:
+https://github.com/ScepterSW/Scepter-Wiki/blob/master/en/ScepterSDK/BaseSDK.md

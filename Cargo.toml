@@ -17,7 +17,7 @@ show-image = "0.14.0"
 
 [features]
 # for debugging purpose only
-# default = ["dcam560"]
+default = ["dcam560"]
 # uses the older API specifically for the DCAM560 model
 dcam560 = []
 # recreates the bindings for vzense-sys

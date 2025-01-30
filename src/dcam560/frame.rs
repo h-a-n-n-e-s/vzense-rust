@@ -1,11 +1,12 @@
 //! Reading frames, creating data arrays.
 
-use std::iter::zip;
+use crate::FrameType;
 
 use super::SESSION_INDEX;
 
 use super::device::Device;
-
+use std::iter::zip;
+use sys::PsReturnStatus_PsRetOK as OK;
 use vzense_sys::dcam560 as sys;
 
 /// Flag signaling if a frame is available
@@ -14,80 +15,68 @@ pub type FrameReady = sys::PsFrameReady;
 /// Depth/IR/RGB image frame data.
 pub type Frame = sys::PsFrame;
 
-/// The available frame types, `Depth` and `RGB` (optical). IR frame is not implemented yet.
-pub enum FrameType {
-    /// depth
-    Depth,
-    /// optical
-    RGB,
-    /// optical mapped to the depth frame
-    RGBMapped,
-}
-
 /// Captures the next image frame from `device`. This API must be invoked before capturing frame data using `get_frame()`. `frame_ready` is a pointer to a buffer storing the signal for the frame availability.
-pub fn read_next_frame(device: &Device, frame_ready: &mut FrameReady) {
+pub fn read_next_frame(device: &mut Device) -> i32 {
     unsafe {
-        sys::Ps2_ReadNextFrame(device.handle, SESSION_INDEX, frame_ready);
+        let status = sys::Ps2_ReadNextFrame(device.handle, SESSION_INDEX, &mut device.frame_ready);
+        if status != OK {
+            println!("vzense_rust: read_next_frame failed with status {}", status);
+            return status;
+        }
     }
+    0
 }
 
-/// Returns the image data in `frame` for the current frame from `device`. Before invoking this API, invoke `read_next_frame()` to capture one image frame from the device. `frame_ready` is a pointer to a buffer storing the signal for the frame availability set in `read_next_frame()`. The image `frame_type` is either `FrameType::Depth` or `FrameType::RGB`.
-pub fn get_frame(
-    device: &Device,
-    frame_ready: &FrameReady,
-    frame_type: &FrameType,
-    frame: &mut Frame,
-) {
-    unsafe {
+/// Returns the image data in `frame` for the current frame from `device`. Before invoking this API, invoke `read_next_frame()` to capture one image frame from the device. `frame_ready` is a pointer to a buffer storing the signal for the frame availability set in `read_next_frame()`.
+pub fn get_frame(device: &mut Device, frame_type: &FrameType, out: &mut [u8]) {
+    let mut ft: Option<sys::PsFrameType> = None;
+    match frame_type {
+        FrameType::Depth => {
+            if device.frame_ready.depth() == 1 {
+                ft = Some(sys::PsFrameType_PsDepthFrame);
+            }
+        }
+        FrameType::IR => {
+            if device.frame_ready.ir() == 1 {
+                ft = Some(sys::PsFrameType_PsIRFrame);
+            }
+        }
+        FrameType::Color => {
+            if device.frame_ready.rgb() == 1 {
+                ft = Some(sys::PsFrameType_PsRGBFrame);
+            }
+        }
+        FrameType::ColorMapped => {
+            if device.frame_ready.mappedRGB() == 1 {
+                ft = Some(sys::PsFrameType_PsMappedRGBFrame);
+            }
+        }
+    }
+    if let Some(ft) = ft {
+        unsafe {
+            let status = sys::Ps2_GetFrame(device.handle, SESSION_INDEX, ft, &mut device.frame);
+            if status != OK {
+                panic!("get_frame failed with status {}", status);
+            }
+        }
+        if device.frame.pFrameData.is_null() {
+            panic!("frame pointer is NULL!");
+        }
         match frame_type {
             FrameType::Depth => {
-                if frame_ready.depth() == 1 {
-                    sys::Ps2_GetFrame(
-                        device.handle,
-                        SESSION_INDEX,
-                        sys::PsFrameType_PsDepthFrame,
-                        frame,
-                    );
-                }
+                get_normalized_depth(device, out);
+                device.current_frame_type = Some(FrameType::Depth);
             }
-            FrameType::RGB => {
-                // check if rgb is mapped to depth
-                // let is_mapped = &mut 0;
-                // should actually be `Ps2_GetMapperEnabledRGBToDepth` but the names seem to be mixed up
-                // sys::Ps2_GetMapperEnabledDepthToRGB(device.handle, SESSION_INDEX, is_mapped);
-
-                // let rgb_frame_type = match *is_mapped {
-                //     0 => sys::PsFrameType_PsRGBFrame,
-                //     _ => sys::PsFrameType_PsMappedRGBFrame,
-                // };
-
-                if frame_ready.rgb() == 1 {
-                    sys::Ps2_GetFrame(
-                        device.handle,
-                        SESSION_INDEX,
-                        sys::PsFrameType_PsRGBFrame,
-                        frame,
-                    );
-                }
+            FrameType::IR => {
+                get_normalized_ir(device, 0, 255, out);
+                device.current_frame_type = Some(FrameType::IR);
             }
-            FrameType::RGBMapped => {
-                // check if rgb is mapped to depth
-                // let is_mapped = &mut 0;
-                // should actually be `Ps2_GetMapperEnabledRGBToDepth` but the names seem to be mixed up
-                // sys::Ps2_GetMapperEnabledDepthToRGB(device.handle, SESSION_INDEX, is_mapped);
-
-                // let rgb_frame_type = match *is_mapped {
-                //     0 => sys::PsFrameType_PsRGBFrame,
-                //     _ => sys::PsFrameType_PsMappedRGBFrame,
-                // };
-
-                if frame_ready.mappedRGB() == 1 {
-                    sys::Ps2_GetFrame(
-                        device.handle,
-                        SESSION_INDEX,
-                        sys::PsFrameType_PsMappedRGBFrame,
-                        frame,
-                    );
+            FrameType::Color | FrameType::ColorMapped => {
+                get_bgr(device, out);
+                if *frame_type == FrameType::Color {
+                    device.current_frame_type = Some(FrameType::Color);
+                } else {
+                    device.current_frame_type = Some(FrameType::ColorMapped);
                 }
             }
         }
@@ -95,49 +84,51 @@ pub fn get_frame(
 }
 
 /// Creates `normalized_depth` data array from `frame`.
-pub fn get_normalized_depth(
-    frame: &Frame,
-    min_depth: u16,
-    max_depth: u16,
-    normalized_depth: &mut [u8],
-) {
+fn get_normalized_depth(device: &Device, normalized_depth: &mut [u8]) {
     unsafe {
-        let p = std::ptr::slice_from_raw_parts(frame.pFrameData, frame.dataLen as usize)
-            .as_ref()
-            .unwrap();
+        let p =
+            std::ptr::slice_from_raw_parts(device.frame.pFrameData, device.frame.dataLen as usize)
+                .as_ref()
+                .unwrap();
 
         for (ndi, pi) in zip(normalized_depth, p.chunks_exact(2)) {
             // create one u16 from two consecutive u8 and clamp to measuring range
-            let depth_mm = u16::from_le_bytes([pi[0], pi[1]]).clamp(min_depth, max_depth);
+            let depth_mm =
+                u16::from_le_bytes([pi[0], pi[1]]).clamp(device.min_depth_mm, device.max_depth_mm);
 
             // scale to u8
-            *ndi = ((depth_mm - min_depth) as f32 * 255.0 / (max_depth - min_depth) as f32).floor()
-                as u8;
+            *ndi = ((depth_mm - device.min_depth_mm) as f32 * 255.0
+                / (device.max_depth_mm - device.min_depth_mm) as f32)
+                .floor() as u8;
         }
     }
 }
 
-/// Creates `bgr` data array from `frame`.
-pub fn get_bgr(frame: &Frame, bgr: &mut [u8]) {
+/// Creates `normalized_ir` data array from `frame`.
+fn get_normalized_ir(device: &Device, min_ir: u8, max_ir: u8, normalized_ir: &mut [u8]) {
     unsafe {
-        let p = std::ptr::slice_from_raw_parts(frame.pFrameData, frame.dataLen as usize)
-            .as_ref()
-            .unwrap();
+        let p =
+            std::ptr::slice_from_raw_parts(device.frame.pFrameData, device.frame.dataLen as usize)
+                .as_ref()
+                .unwrap();
 
-        for (bgri, pi) in zip(bgr, p) {
-            *bgri = *pi;
+        for (nii, pi) in zip(normalized_ir, p.iter()) {
+            // scale to u8
+            *nii = ((pi - min_ir) as f32 * 255.0 / (max_ir - min_ir) as f32).floor() as u8;
         }
     }
 }
 
-/// Checks if the number of pixels in `frame` equals `pixel_count`.
-pub fn check_pixel_count(frame: &Frame, pixel_count: usize) {
-    let w = frame.width as usize;
-    let h = frame.height as usize;
-    assert!(
-        w * h == pixel_count,
-        "pixel count is not equal to {} * {}",
-        w,
-        h
-    );
+/// Creates `color` data array from `frame`.
+fn get_bgr(device: &Device, color: &mut [u8]) {
+    unsafe {
+        let p =
+            std::ptr::slice_from_raw_parts(device.frame.pFrameData, device.frame.dataLen as usize)
+                .as_ref()
+                .unwrap();
+
+        if color.len() == (*p).len() {
+            color.copy_from_slice(p);
+        }
+    }
 }

@@ -4,27 +4,22 @@ This example covers all the functionality provided by the library. It connects t
 
 // by default using the newest Scepter API
 #[cfg(not(feature = "dcam560"))]
-use vzense_rust::scepter::{
-    device::{ColorFormat, Device},
-    frame::{get_frame, read_next_frame, FrameType},
-};
+use vzense_rust::scepter as camera_api;
 
 // uses the older API specifically for the DCAM560 model
 #[cfg(feature = "dcam560")]
-use vzense_rust::dcam560::{
-    device::{
-        get_depth_measuring_range, get_rgb_resolution, init, map_rgb_to_depth,
-        set_depth_measuring_range_dcam560, set_rgb_resolution, shut_down, DepthRange,
-    },
-    frame::{
-        check_pixel_count, get_bgr, get_frame, get_normalized_depth, read_next_frame, Frame,
-        FrameReady, FrameType,
-    },
+use vzense_rust::dcam560 as camera_api;
+
+use camera_api::{
+    device::Device,
+    frame::{get_frame, read_next_frame},
 };
 
-use vzense_rust::util::{
-    color_map::TURBO, new_fixed_vec, touch_detector::TouchDetector, ColorResolution, Counter,
-    Format, KeyboardEvent, Resolution, DEFAULT_PIXEL_COUNT, DEFAULT_RESOLUTION,
+use vzense_rust::{
+    util::{
+        color_map::TURBO, new_fixed_vec, touch_detector::TouchDetector, Counter, KeyboardEvent,
+    },
+    ColorFormat, ColorResolution, FrameType, Resolution, DEFAULT_PIXEL_COUNT, DEFAULT_RESOLUTION,
 };
 
 #[show_image::main]
@@ -42,20 +37,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Choosing the depth measuring range for DCAM560 (Near, Mid, or Far)
     #[cfg(feature = "dcam560")]
     {
-        set_depth_measuring_range_dcam560(&device, DepthRange::Mid);
+        device.set_depth_measuring_range_dcam560(vzense_rust::DepthRange::Near);
 
-        let range = get_depth_measuring_range(&device);
+        let range = device.get_depth_measuring_range();
         println!("depth measuring range: {} mm to {} mm", range.0, range.1);
     }
 
     // Choosing the min/max depth in mm for the color mapping of the depth output. These values also bound the depths used in the `TochDetector` to reduce measuring artifacts. In the specs the depth measuring range for the NYX650 is given as min: 300 mm, max: 4500 mm. The depth measuring range for the DCAM560 depends on the range chosen above.
-    device.set_depth_range(500, 1000);
+    device.set_depth_range(160, 1100);
 
     let mut touch_detector = TouchDetector::new(&device, 5.0, 50.0, 30, 5, DEFAULT_PIXEL_COUNT);
 
     // Setting the color resolution. If not set the default will be 640x480.
     // If mapper is set to true, resolution setting will be ignored and reverted to 640x480.
-    device.set_color_resolution(ColorResolution::Res640x480);
+    device.set_color_resolution(ColorResolution::Res800x600);
 
     // The normal color frame Type. Might be reset below if mapped.
     let mut color_frame_type = FrameType::Color;
@@ -75,7 +70,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // vectors to store image data
     let mut signal = new_fixed_vec(DEFAULT_PIXEL_COUNT, 0u8); // 8 bit per pixel
     let mut distance = new_fixed_vec(DEFAULT_PIXEL_COUNT, 0.0f32); // 32 bit per pixel
-    let mut rgb = new_fixed_vec(3 * DEFAULT_PIXEL_COUNT, 0u8); // 24 bit per pixel
+    let mut depth = new_fixed_vec(3 * DEFAULT_PIXEL_COUNT, 0u8); // 24 bit per pixel
+    let mut color = new_fixed_vec(3 * color_resolution.to_pixel_count(), 0u8); // 24 bit per pixel
 
     // creating the image windows, `double()` doubles the size of the window in both dimensions
     let depth_window = create_window("depth", &DEFAULT_RESOLUTION.double(), true);
@@ -96,39 +92,41 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         read_next_frame(&mut device, 1200);
 
         #[cfg(feature = "dcam560")]
-        read_next_frame(&device, frame_ready);
+        read_next_frame(&mut device);
 
         // depth ______________________________________________________________
 
         get_frame(&mut device, &FrameType::Depth, &mut signal);
-        // touch_detector.get_normalized_average_depth(signal);
+
+        // Use below to get a smoother depth signal (averaged over `sample_size` of `touch_detector`).
+        // touch_detector.get_normalized_average_depth(&mut signal);
 
         // apply Google's Turbo color map
         for (i, si) in signal.iter().enumerate() {
-            rgb[3 * i..3 * i + 3].copy_from_slice(&TURBO[*si as usize]);
+            depth[3 * i..3 * i + 3].copy_from_slice(&TURBO[*si as usize]);
         }
 
-        update_window(&depth_window, &DEFAULT_RESOLUTION, &rgb, Format::Rgb);
+        update_window(&depth_window, &DEFAULT_RESOLUTION, &depth, Format::Rgb);
 
         // touch detector _____________________________________________________
 
-        // the last get_frame() call before this should have FrameType::Depth
+        // The last `get_frame` call before this should have `FrameType::Depth`, otherwise `process` does nothing.
         touch_detector.process(&device, &mut signal, &mut distance);
 
         update_window(&touch_window, &DEFAULT_RESOLUTION, &signal, Format::Mono);
 
         // color ________________________________________________________________
 
-        get_frame(&mut device, &color_frame_type, &mut rgb);
+        get_frame(&mut device, &color_frame_type, &mut color);
 
         if init {
             init = false;
-            device.check_pixel_count(rgb.len() / 3);
+            device.check_pixel_count(color.len() / 3);
             println!("frame info: {:?}", device.get_frame_info());
             println!("press Enter to quit")
         }
 
-        update_window(&color_window, &color_resolution, &rgb, Format::Rgb);
+        update_window(&color_window, &color_resolution, &color, Format::Rgb);
 
         //_____________________________________________________________________
 
@@ -147,6 +145,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 // helper functions using the show_image crate ////////////////////////////////
+
+/// Image formats.
+pub enum Format {
+    Mono,
+    Rgb,
+    Bgr,
+}
 
 use show_image::{ImageInfo, ImageView, WindowOptions, WindowProxy};
 

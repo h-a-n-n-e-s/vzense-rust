@@ -2,24 +2,17 @@
 
 use std::ffi::CStr;
 use sys::ScStatus_SC_OK as OK;
-use sys::{
-    scSetColorPixelFormat, ScPixelFormat_SC_PIXEL_FORMAT_BGR_888,
-    ScPixelFormat_SC_PIXEL_FORMAT_RGB_888,
-};
-use vzense_sys::scepter::{self as sys, scGetFirmwareVersion};
 
-use crate::util::{ColorResolution, Resolution, DEFAULT_RESOLUTION};
+use vzense_sys::scepter as sys;
 
-pub enum ColorFormat {
-    Rgb,
-    Bgr,
-}
+use crate::{ColorFormat, ColorResolution, FrameType, Resolution, DEFAULT_RESOLUTION};
 
-/// Device is a wrapper for the raw pointer `handle` used in every `sys` function. It also includes `frame_ready` and `frame`, containing frame data.
+/// Device is a wrapper for the raw pointer `handle` used in every `sys` function. It also contains `frame_ready` (containing frame availability data) and `frame` (containing frame data).
 pub struct Device {
     pub(super) handle: sys::ScDeviceHandle,
     pub(super) frame_ready: sys::ScFrameReady,
     pub(super) frame: sys::ScFrame,
+    pub(super) current_frame_type: Option<FrameType>,
     pub(super) min_depth_mm: u16,
     pub(super) max_depth_mm: u16,
 }
@@ -28,36 +21,38 @@ impl Device {
     pub fn init() -> Result<Self, String> {
         unsafe {
             println!("initializing...");
+
             let mut status = sys::scInitialize();
             if status != OK {
                 return Err(format!("initialization failed with status {}", status));
             }
-            let device_count = &mut 0;
+
+            let mut device_count = 0;
             println!("searching for device... ");
-            status = sys::scGetDeviceCount(device_count, 3000);
+            status = sys::scGetDeviceCount(&mut device_count, 3000);
             if status != OK {
                 return Err(format!("get device count failed with status {}", status));
-            } else if *device_count > 0 {
+            } else if device_count > 0 {
                 println!("device found");
             } else {
                 return Err("no device found".to_string());
             }
 
-            let device_info = &mut sys::ScDeviceInfo::default();
+            let mut device_info = sys::ScDeviceInfo::default();
 
-            sys::scGetDeviceInfoList(*device_count, device_info);
+            sys::scGetDeviceInfoList(device_count, &mut device_info);
             let ip = device_info.ip.as_ptr();
             let model = device_info.productName.as_ptr();
 
-            // Valgrind gets stuck between these two huis
-            // println!("----------------------------------------------hui1");
+            // Valgrind gets stuck between these two marks
+            // println!("----------------------------------------------1");
 
             let device = Device::open_device_by_ip(ip).unwrap();
 
-            // println!("----------------------------------------------hui2");
+            // println!("----------------------------------------------2");
 
             let mut firmware = [0; 64];
-            status = scGetFirmwareVersion(device.handle, firmware.as_mut_ptr(), 64);
+            status = sys::scGetFirmwareVersion(device.handle, firmware.as_mut_ptr(), 64);
             if status != OK {
                 return Err(format!(
                     "get firmware version failed with status {}",
@@ -75,8 +70,8 @@ impl Device {
                     .unwrap()
             );
 
-            let work_mode = &mut sys::ScWorkMode::default();
-            status = sys::scGetWorkMode(device.handle, work_mode);
+            let mut work_mode = sys::ScWorkMode::default();
+            status = sys::scGetWorkMode(device.handle, &mut work_mode);
             if status != OK {
                 return Err(format!("get work mode failed with status {}", status));
             }
@@ -85,10 +80,30 @@ impl Device {
             if status != OK {
                 return Err(format!("start stream failed with status {}", status));
             } else {
-                println!("stream started, work mode: {}", *work_mode);
+                println!("stream started, work mode: {}", work_mode);
             }
 
             Ok(device)
+        }
+    }
+
+    fn open_device_by_ip(ip: *const i8) -> Result<Self, String> {
+        let mut handle = 0 as sys::ScDeviceHandle;
+        let status = unsafe { sys::scOpenDeviceByIP(ip, &mut handle) };
+        if status != OK {
+            return Err(format!("open device failed with status {}", status));
+        }
+        if !handle.is_null() {
+            Ok(Device {
+                handle,
+                frame_ready: sys::ScFrameReady::default(),
+                frame: sys::ScFrame::default(),
+                current_frame_type: None,
+                min_depth_mm: 500,  // default value
+                max_depth_mm: 1000, // default value
+            })
+        } else {
+            Err("device ptr is null".to_string())
         }
     }
 
@@ -121,18 +136,23 @@ impl Device {
                 self.handle,
                 if is_enabled { 1 } else { 0 },
             );
+            // let mut is_mapped = 0;
+            // sys::scGetTransformColorImgToDepthSensorEnabled(self.handle, &mut is_mapped);
+            // println!("is_mapped: {}", is_mapped);
         }
     }
 
     pub fn set_color_format(&self, format: ColorFormat) {
         unsafe {
             match format {
-                ColorFormat::Rgb => {
-                    sys::scSetColorPixelFormat(self.handle, ScPixelFormat_SC_PIXEL_FORMAT_RGB_888)
-                }
-                ColorFormat::Bgr => {
-                    scSetColorPixelFormat(self.handle, ScPixelFormat_SC_PIXEL_FORMAT_BGR_888)
-                }
+                ColorFormat::Rgb => sys::scSetColorPixelFormat(
+                    self.handle,
+                    sys::ScPixelFormat_SC_PIXEL_FORMAT_RGB_888,
+                ),
+                ColorFormat::Bgr => sys::scSetColorPixelFormat(
+                    self.handle,
+                    sys::ScPixelFormat_SC_PIXEL_FORMAT_BGR_888,
+                ),
             };
         }
     }
@@ -141,9 +161,9 @@ impl Device {
     pub fn set_color_resolution(&self, resolution: ColorResolution) {
         unsafe {
             // check if color is mapped to depth
-            let is_mapped = &mut 0;
-            sys::scGetTransformColorImgToDepthSensorEnabled(self.handle, is_mapped);
-            if *is_mapped == 1 && resolution != ColorResolution::Res640x480 {
+            let mut is_mapped = 0;
+            sys::scGetTransformColorImgToDepthSensorEnabled(self.handle, &mut is_mapped);
+            if is_mapped == 1 && resolution != ColorResolution::Res640x480 {
                 sys::scSetColorResolution(self.handle, 640, 480);
                 println!(
                     "setting of color resolution is ignored because color frame is mapped to depth"
@@ -160,22 +180,22 @@ impl Device {
 
     /// Returns the resolution of the color frame.
     pub fn get_color_resolution(&self) -> Resolution {
-        let w = &mut 0;
-        let h = &mut 0;
+        let mut w = 0;
+        let mut h = 0;
         unsafe {
-            sys::scGetColorResolution(self.handle, w, h);
+            sys::scGetColorResolution(self.handle, &mut w, &mut h);
         }
-        Resolution::new(*w as u32, *h as u32)
+        Resolution::new(w as u32, h as u32)
     }
 
     /// [depricated] Returns the current depth range `(min, max)` of the camera in mm. Note: At least the min value seems to have no practical meaning. For the NYX650 the returned min value is 1 mm which makes no sense, while the max value is 4700 mm. In the specs the depth range for the NYX650 is given as min: 300 mm, max: 4500 mm.
     #[deprecated]
     pub fn get_depth_measuring_range(&self) -> (u16, u16) {
         unsafe {
-            let min = &mut 0;
-            let max = &mut 0;
-            sys::scGetDepthRangeValue(self.handle, min, max);
-            (*min as u16, *max as u16)
+            let mut min = 0;
+            let mut max = 0;
+            sys::scGetDepthRangeValue(self.handle, &mut min, &mut max);
+            (min as u16, max as u16)
         }
     }
 
@@ -193,25 +213,6 @@ impl Device {
             }
         }
     }
-
-    fn open_device_by_ip(ip: *const i8) -> Result<Self, String> {
-        let handle = &mut (0 as sys::ScDeviceHandle);
-        let status = unsafe { sys::scOpenDeviceByIP(ip, handle) };
-        if status != OK {
-            return Err(format!("open device failed with status {}", status));
-        }
-        if !handle.is_null() {
-            Ok(Device {
-                handle: *handle,
-                frame_ready: sys::ScFrameReady::default(),
-                frame: sys::ScFrame::default(),
-                min_depth_mm: 500,  // default value
-                max_depth_mm: 1000, // default value
-            })
-        } else {
-            Err("device ptr is null".to_string())
-        }
-    }
 }
 
 /// implement trait Data to allow use of Device in touch_detector
@@ -227,5 +228,8 @@ impl crate::util::touch_detector::Data for Device {
     }
     fn get_max_depth_mm(&self) -> u16 {
         self.max_depth_mm
+    }
+    fn get_current_frame_type(&self) -> &Option<FrameType> {
+        &self.current_frame_type
     }
 }

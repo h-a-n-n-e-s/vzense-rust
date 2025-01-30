@@ -1,7 +1,10 @@
 //! Reading frames, creating data arrays.
 
+use crate::FrameType;
+
 use super::device::Device;
 use std::iter::zip;
+use sys::ScStatus_SC_OK as OK;
 use vzense_sys::scepter as sys;
 
 /// Flag signaling if a frame is available
@@ -10,19 +13,11 @@ pub type FrameReady = sys::ScFrameReady;
 /// Depth/IR/Color image frame data.
 pub type Frame = sys::ScFrame;
 
-/// The available frame types, `Depth`, `IR` (infrared), `Color`, and `ColorMapped`.
-pub enum FrameType {
-    Depth,
-    IR,
-    Color,
-    ColorMapped,
-}
-
 /// Captures the next image frame from `device`. This API must be invoked before capturing frame data using `get_frame()`. `max_wait_time_ms` is the maximum waiting time for the next frame in milliseconds. The recommended value is 2 * 1000 / fps. `frame_ready` is a pointer to a buffer storing the signal for the frame availability.
 pub fn read_next_frame(device: &mut Device, max_wait_time_ms: u16) -> i32 {
     unsafe {
         let status = sys::scGetFrameReady(device.handle, max_wait_time_ms, &mut device.frame_ready);
-        if status != sys::ScStatus_SC_OK {
+        if status != OK {
             println!("vzense_rust: read_next_frame failed with status {}", status);
             return status;
         }
@@ -58,7 +53,7 @@ pub fn get_frame(device: &mut Device, frame_type: &FrameType, out: &mut [u8]) {
     if let Some(ft) = ft {
         unsafe {
             let status = sys::scGetFrame(device.handle, ft, &mut device.frame);
-            if status != sys::ScStatus_SC_OK {
+            if status != OK {
                 panic!("get_frame failed with status {}", status);
             }
         }
@@ -66,9 +61,22 @@ pub fn get_frame(device: &mut Device, frame_type: &FrameType, out: &mut [u8]) {
             panic!("frame pointer is NULL!");
         }
         match frame_type {
-            FrameType::Depth => get_normalized_depth(device, out),
-            FrameType::IR => get_normalized_ir(device, 0, 255, out),
-            FrameType::Color | FrameType::ColorMapped => get_bgr(device, out),
+            FrameType::Depth => {
+                get_normalized_depth(device, out);
+                device.current_frame_type = Some(FrameType::Depth);
+            }
+            FrameType::IR => {
+                get_normalized_ir(device, 0, 255, out);
+                device.current_frame_type = Some(FrameType::IR);
+            }
+            FrameType::Color | FrameType::ColorMapped => {
+                get_bgr(device, out);
+                if *frame_type == FrameType::Color {
+                    device.current_frame_type = Some(FrameType::Color);
+                } else {
+                    device.current_frame_type = Some(FrameType::ColorMapped);
+                }
+            }
         }
     }
 }

@@ -2,14 +2,17 @@
 
 use std::iter::zip;
 
+use crate::FrameType;
+
 use super::new_fixed_vec;
 
-/// to allow invocation of generic type Frame
+/// to allow invocation of generic device from different models
 pub trait Data {
     fn get_frame_p_frame_data(&self) -> *mut u8;
     fn get_frame_data_len(&self) -> usize;
     fn get_min_depth_mm(&self) -> u16;
     fn get_max_depth_mm(&self) -> u16;
+    fn get_current_frame_type(&self) -> &Option<FrameType>;
 }
 
 /**
@@ -63,59 +66,66 @@ impl TouchDetector {
         }
     }
 
-    /// Processes one input `depth_frame` resulting in a `touch_signal` (255 for 'touch', 0 otherwise) and a `distance` from the initially measured depth.
+    /// Processes a depth frame resulting in a `touch_signal` (255 for 'touch', 0 otherwise) and a `distance` from the initially measured depth. This function does nothing if the previous call to `frame::get_frame()` did not use `FrameType::Depth`.
     pub fn process<Device: Data>(
         &mut self,
         device: &Device,
         touch_signal: &mut [u8],
         distance: &mut [f32],
     ) {
-        unsafe {
-            let p = match std::ptr::slice_from_raw_parts(
-                device.get_frame_p_frame_data(),
-                device.get_frame_data_len(),
-            )
+        // check if current frame holds a depth frame
+        if device
+            .get_current_frame_type()
             .as_ref()
-            {
-                Some(ptr) => ptr,
-                None => return,
-            };
-
-            for (i, pi) in p.chunks_exact(2).enumerate() {
-                // create one u16 from two consecutive u8 and clamp to measuring range
-                let depth_mm =
-                    u16::from_le_bytes([pi[0], pi[1]]).clamp(self.min_depth, self.max_depth);
-
-                // create baseline by averaging over first baseline_sample_size frames
-                if self.baseline_sample < self.baseline_sample_size {
-                    self.baseline_depth_sum[i] += depth_mm as u32;
-                }
-
-                // pixel index of current sample in ring buffer
-                let j = self.pixel_count * self.sample + i;
-
-                // subtract old depth value in ring buffer from depth sum
-                self.depth_sum[i] -= self.ring_buffer[j] as u32;
-
-                // set ring buffer to new depth value and add it to depth sum
-                self.ring_buffer[j] = depth_mm;
-                self.depth_sum[i] += depth_mm as u32;
-
-                let diff = self.baseline_depth_sum[i] as f32 / self.baseline_sample_size as f32
-                    - self.depth_sum[i] as f32 / self.sample_size as f32;
-
-                touch_signal[i] = if self.min_touch < diff && diff < self.max_touch {
-                    255
-                } else {
-                    0
+            .is_some_and(|f| *f == FrameType::Depth)
+        {
+            unsafe {
+                let p = match std::ptr::slice_from_raw_parts(
+                    device.get_frame_p_frame_data(),
+                    device.get_frame_data_len(),
+                )
+                .as_ref()
+                {
+                    Some(ptr) => ptr,
+                    None => return,
                 };
 
-                distance[i] = diff;
+                for (i, pi) in p.chunks_exact(2).enumerate() {
+                    // create one u16 from two consecutive u8 and clamp to measuring range
+                    let depth_mm =
+                        u16::from_le_bytes([pi[0], pi[1]]).clamp(self.min_depth, self.max_depth);
+
+                    // create baseline by averaging over first baseline_sample_size frames
+                    if self.baseline_sample < self.baseline_sample_size {
+                        self.baseline_depth_sum[i] += depth_mm as u32;
+                    }
+
+                    // pixel index of current sample in ring buffer
+                    let j = self.pixel_count * self.sample + i;
+
+                    // subtract old depth value in ring buffer from depth sum
+                    self.depth_sum[i] -= self.ring_buffer[j] as u32;
+
+                    // set ring buffer to new depth value and add it to depth sum
+                    self.ring_buffer[j] = depth_mm;
+                    self.depth_sum[i] += depth_mm as u32;
+
+                    let diff = self.baseline_depth_sum[i] as f32 / self.baseline_sample_size as f32
+                        - self.depth_sum[i] as f32 / self.sample_size as f32;
+
+                    touch_signal[i] = if self.min_touch < diff && diff < self.max_touch {
+                        255
+                    } else {
+                        0
+                    };
+
+                    distance[i] = diff;
+                }
             }
-        }
-        self.sample = (self.sample + 1) % self.sample_size;
-        if self.baseline_sample < self.baseline_sample_size {
-            self.baseline_sample += 1;
+            self.sample = (self.sample + 1) % self.sample_size;
+            if self.baseline_sample < self.baseline_sample_size {
+                self.baseline_sample += 1;
+            }
         }
     }
 
