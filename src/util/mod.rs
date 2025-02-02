@@ -1,3 +1,5 @@
+//! Common utilities used by all APIs.
+
 pub mod color_map;
 pub mod touch_detector;
 
@@ -18,17 +20,13 @@ pub fn new_fixed_vec<T: Clone>(size: usize, init: T) -> Vec<T> {
     v
 }
 
-// pub fn get_type_name<T>(var: &T) -> &'static str {
-//     std::any::type_name_of_val(var)
-// }
-
 /// Simple keybord event handler.
 pub struct KeyboardEvent {
     pressed: Arc<AtomicBool>,
     thread: JoinHandle<()>,
 }
 impl KeyboardEvent {
-    /// Create a new Event for the keystroke `key`.
+    /// Creates a new event for the keystroke `key`.
     pub fn new(key: &str) -> Self {
         let pressed = Arc::new(AtomicBool::new(false));
         let pressed_cl = pressed.clone();
@@ -46,7 +44,7 @@ impl KeyboardEvent {
         Self { pressed, thread }
     }
 
-    /// Check if a key was pressed.
+    /// Check if the key was pressed.
     pub fn key_was_pressed(&self) -> bool {
         self.pressed.load(Ordering::Relaxed)
     }
@@ -84,5 +82,13 @@ impl Counter {
             );
             std::io::stdout().flush().unwrap();
         }
+    }
+}
+
+/// normalize `[u16]` vector to `[u8]` given `min` and `max` value.
+pub fn normalize_u16_to_u8(input: &[u16], min: u16, max: u16, norm: &mut [u8]) {
+    let d = (max - min) as f32;
+    for (n, i) in std::iter::zip(norm, input) {
+        *n = (((*i).clamp(min, max) - min) as f32 * 255.0 / d).floor() as u8;
     }
 }

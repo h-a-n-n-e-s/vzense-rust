@@ -1,5 +1,5 @@
-/// Google's Turbo color map adapted from
-/// <https://gist.github.com/mikhailov-work/6a308c20e494d9e0ccc29036b28faa7a>
+//! Google's Turbo color map adapted from [here](<https://gist.github.com/mikhailov-work/6a308c20e494d9e0ccc29036b28faa7a>).
+
 pub const TURBO: [[u8; 3]; 256] = [
     [48, 18, 59],
     [50, 21, 67],

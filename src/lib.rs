@@ -3,27 +3,22 @@
 
 pub mod dcam560;
 pub mod scepter;
+
 pub mod util;
 
-/// For the Depth and IR frames, the resolution is fixed to 640x480 for all data modes. The color frame can be set to higher resolutions using `set_color_resolution()`, but the defaults is also 640x480.
+/// The default resolution is 640x480. For depth and IR frames there is only this resolution. The color frame can be set to higher resolutions using `set_color_resolution()`, but the defaults is also 640x480.
 pub const DEFAULT_RESOLUTION: Resolution = Resolution::new(640, 480);
+
+/// Total number of pixels for `DEFAULT_RESOLUTION`.
 pub const DEFAULT_PIXEL_COUNT: usize = DEFAULT_RESOLUTION.to_pixel_count();
 
-/// The available frame types, `Depth`, `IR` (infrared), `Color`, and `ColorMapped`.
-#[derive(PartialEq)]
-pub enum FrameType {
-    Depth,
-    IR,
-    Color,
-    ColorMapped,
-}
-
+/// Choose RGB or BGR format.
 pub enum ColorFormat {
     Rgb,
     Bgr,
 }
 
-/// Possible RGB resolutions.
+/// Possible color resolutions.
 #[derive(PartialEq)]
 pub enum ColorResolution {
     Res640x480,
@@ -31,6 +26,7 @@ pub enum ColorResolution {
     Res1600x1200,
 }
 
+/// Frame resolution.
 #[derive(PartialEq)]
 pub struct Resolution {
     width: u32,
@@ -43,10 +39,10 @@ impl Resolution {
             height: h,
         }
     }
-    pub fn to_array(&self) -> [u32; 2] {
+    pub const fn to_array(&self) -> [u32; 2] {
         [self.width, self.height]
     }
-    pub fn to_tuple(&self) -> (u32, u32) {
+    pub const fn to_tuple(&self) -> (u32, u32) {
         (self.width, self.height)
     }
     pub const fn to_pixel_count(&self) -> usize {
@@ -60,8 +56,8 @@ impl Resolution {
     }
 }
 
-/// Possible depth ranges. Only used for dcam560.
-pub enum DepthRange {
+/// Possible depth measuring ranges. Only used for DCAM560.
+pub enum DepthMeasuringRange {
     Near,
     Mid,
     Far,

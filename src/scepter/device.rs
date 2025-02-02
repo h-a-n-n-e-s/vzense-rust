@@ -1,18 +1,20 @@
-//! Basic routines to initialize or shut down a device.
+//! Basic routines to initialize or shut down a device and to set/get parameters.
 
 use std::ffi::CStr;
 use sys::ScStatus_SC_OK as OK;
 
 use vzense_sys::scepter as sys;
 
-use crate::{ColorFormat, ColorResolution, FrameType, Resolution, DEFAULT_RESOLUTION};
+use crate::{ColorFormat, ColorResolution, Resolution};
 
-/// Device is a wrapper for the raw pointer `handle` used in every `sys` function. It also contains `frame_ready` (containing frame availability data) and `frame` (containing frame data).
+/// A wrapper for the raw pointer `handle` used in every `vzense_sys` call. It also includes `frame_ready` (containing frame availability data) and `frame` (containing a pointer to the actual frame data).
 pub struct Device {
     pub(super) handle: sys::ScDeviceHandle,
     pub(super) frame_ready: sys::ScFrameReady,
     pub(super) frame: sys::ScFrame,
-    pub(super) current_frame_type: Option<FrameType>,
+    pub(super) color_resolution: ColorResolution,
+    pub(super) color_is_mapped: bool,
+    pub(super) current_frame_is_depth: bool,
     pub(super) min_depth_mm: u16,
     pub(super) max_depth_mm: u16,
 }
@@ -44,12 +46,7 @@ impl Device {
             let ip = device_info.ip.as_ptr();
             let model = device_info.productName.as_ptr();
 
-            // Valgrind gets stuck between these two marks
-            // println!("----------------------------------------------1");
-
             let device = Device::open_device_by_ip(ip).unwrap();
-
-            // println!("----------------------------------------------2");
 
             let mut firmware = [0; 64];
             status = sys::scGetFirmwareVersion(device.handle, firmware.as_mut_ptr(), 64);
@@ -83,6 +80,8 @@ impl Device {
                 println!("stream started, work mode: {}", work_mode);
             }
 
+            sys::scSetColorResolution(device.handle, 640, 480);
+
             Ok(device)
         }
     }
@@ -98,7 +97,9 @@ impl Device {
                 handle,
                 frame_ready: sys::ScFrameReady::default(),
                 frame: sys::ScFrame::default(),
-                current_frame_type: None,
+                color_resolution: ColorResolution::Res640x480,
+                color_is_mapped: false,
+                current_frame_is_depth: false,
                 min_depth_mm: 500,  // default value
                 max_depth_mm: 1000, // default value
             })
@@ -107,13 +108,15 @@ impl Device {
         }
     }
 
+    /// Choosing the min/max depth in mm for the color mapping of the depth output. These values also bound the depths used in the `util::TochDetector` to reduce measuring artifacts.
     pub fn set_depth_range(&mut self, min_depth_mm: u16, max_depth_mm: u16) {
         self.min_depth_mm = min_depth_mm;
         self.max_depth_mm = max_depth_mm;
     }
 
-    pub fn get_frame_info(&self) -> sys::ScFrame {
-        self.frame
+    /// Get frame info like frame type, pixel format, width, height, etc.
+    pub fn get_frame_info(&self) -> String {
+        format!("{:?}", self.frame)
     }
 
     /// Checks if the number of pixels in `frame` equals `pixel_count`.
@@ -125,23 +128,7 @@ impl Device {
         }
     }
 
-    /// Enable or disable the mapping of the color image to depth camera space.
-    pub fn map_color_to_depth(&self, is_enabled: bool) {
-        let color_resolution = self.get_color_resolution();
-        if color_resolution != DEFAULT_RESOLUTION {
-            self.set_color_resolution(ColorResolution::Res640x480);
-        }
-        unsafe {
-            sys::scSetTransformColorImgToDepthSensorEnabled(
-                self.handle,
-                if is_enabled { 1 } else { 0 },
-            );
-            // let mut is_mapped = 0;
-            // sys::scGetTransformColorImgToDepthSensorEnabled(self.handle, &mut is_mapped);
-            // println!("is_mapped: {}", is_mapped);
-        }
-    }
-
+    /// Set the color frame format to either RGB or BGR.
     pub fn set_color_format(&self, format: ColorFormat) {
         unsafe {
             match format {
@@ -157,25 +144,40 @@ impl Device {
         }
     }
 
-    /// Sets the resolution of the color frame. Three resolutions are currently available: 640x480, 800x600, and 1600x1200.
-    pub fn set_color_resolution(&self, resolution: ColorResolution) {
-        unsafe {
-            // check if color is mapped to depth
-            let mut is_mapped = 0;
-            sys::scGetTransformColorImgToDepthSensorEnabled(self.handle, &mut is_mapped);
-            if is_mapped == 1 && resolution != ColorResolution::Res640x480 {
-                sys::scSetColorResolution(self.handle, 640, 480);
-                println!(
-                    "setting of color resolution is ignored because color frame is mapped to depth"
-                )
-            }
-
-            match resolution {
-                ColorResolution::Res640x480 => sys::scSetColorResolution(self.handle, 640, 480),
-                ColorResolution::Res800x600 => sys::scSetColorResolution(self.handle, 800, 600),
-                ColorResolution::Res1600x1200 => sys::scSetColorResolution(self.handle, 1600, 1200),
-            };
+    /// Enable or disable the mapping of the color image to depth camera space.
+    pub fn map_color_to_depth(&mut self, is_enabled: bool) {
+        if self.color_resolution != ColorResolution::Res640x480 {
+            self.set_color_resolution(ColorResolution::Res640x480);
+            self.color_resolution = ColorResolution::Res640x480;
         }
+        unsafe {
+            sys::scSetTransformColorImgToDepthSensorEnabled(
+                self.handle,
+                if is_enabled { 1 } else { 0 },
+            );
+        }
+        self.color_is_mapped = is_enabled;
+    }
+
+    /// Sets the resolution of the color frame and also returns it. Three resolutions are currently available: 640x480, 800x600, and 1600x1200.
+    pub fn set_color_resolution(&mut self, resolution: ColorResolution) -> Resolution {
+        if self.color_is_mapped {
+            println!(
+                "setting of color resolution is ignored because color frame is mapped to depth"
+            );
+        } else {
+            unsafe {
+                match resolution {
+                    ColorResolution::Res640x480 => sys::scSetColorResolution(self.handle, 640, 480),
+                    ColorResolution::Res800x600 => sys::scSetColorResolution(self.handle, 800, 600),
+                    ColorResolution::Res1600x1200 => {
+                        sys::scSetColorResolution(self.handle, 1600, 1200)
+                    }
+                };
+            }
+            self.color_resolution = resolution;
+        }
+        self.get_color_resolution()
     }
 
     /// Returns the resolution of the color frame.
@@ -188,7 +190,7 @@ impl Device {
         Resolution::new(w as u32, h as u32)
     }
 
-    /// [depricated] Returns the current depth range `(min, max)` of the camera in mm. Note: At least the min value seems to have no practical meaning. For the NYX650 the returned min value is 1 mm which makes no sense, while the max value is 4700 mm. In the specs the depth range for the NYX650 is given as min: 300 mm, max: 4500 mm.
+    /// Returns the current depth measuring range `(min, max)` of the camera in mm. **Note**: At least the min value seems to have no practical meaning. For the NYX650 the returned min value is 1 mm which makes no sense, while the max value is 4700 mm. In the specs the depth range for the NYX650 is given as min: 300 mm, max: 4500 mm.
     #[deprecated]
     pub fn get_depth_measuring_range(&self) -> (u16, u16) {
         unsafe {
@@ -215,7 +217,7 @@ impl Device {
     }
 }
 
-/// implement trait Data to allow use of Device in touch_detector
+/// `Data` trait to allow use of `Device` in `util::TouchDetector`.
 impl crate::util::touch_detector::Data for Device {
     fn get_frame_p_frame_data(&self) -> *mut u8 {
         self.frame.pFrameData
@@ -229,7 +231,7 @@ impl crate::util::touch_detector::Data for Device {
     fn get_max_depth_mm(&self) -> u16 {
         self.max_depth_mm
     }
-    fn get_current_frame_type(&self) -> &Option<FrameType> {
-        &self.current_frame_type
+    fn current_frame_is_depth(&self) -> bool {
+        self.current_frame_is_depth
     }
 }

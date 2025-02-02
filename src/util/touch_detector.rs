@@ -2,29 +2,25 @@
 
 use std::iter::zip;
 
-use crate::FrameType;
-
 use super::new_fixed_vec;
 
-/// to allow invocation of generic device from different models
+/// To allow invocation of generic devices from different APIs.
 pub trait Data {
     fn get_frame_p_frame_data(&self) -> *mut u8;
     fn get_frame_data_len(&self) -> usize;
     fn get_min_depth_mm(&self) -> u16;
     fn get_max_depth_mm(&self) -> u16;
-    fn get_current_frame_type(&self) -> &Option<FrameType>;
+    fn current_frame_is_depth(&self) -> bool;
 }
 
 /**
-### A simple touch detector based on depth data.
-
 The touch detector uses depth data to calculate the difference between the current depth and an initially recorded baseline depth. If this difference is between `min_touch` and `max_touch` a touch is assumed.
 
 * `min_depth` and `max_depth` are the measuring ranges of the depth camera in mm.
 * `min_touch` is the minimum height in mm above the surface considered to be a touch. If this parameter is too small, noise will lead to a lot of false detections.
 * `max_touch` is the maximum height in mm above the surface considered to be a touch.
 
-First an average baseline depth is computed using the first `baseline_sample_size` frames. The current depth is estimated by a moving average of `sample_size` frames.
+First, an average baseline depth is computed using the first `baseline_sample_size` frames. The current depth is estimated by a moving average of `sample_size` frames.
 */
 pub struct TouchDetector {
     min_depth: u16,
@@ -66,7 +62,9 @@ impl TouchDetector {
         }
     }
 
-    /// Processes a depth frame resulting in a `touch_signal` (255 for 'touch', 0 otherwise) and a `distance` from the initially measured depth. This function does nothing if the previous call to `frame::get_frame()` did not use `FrameType::Depth`.
+    /// Processes a depth frame resulting in a `touch_signal` (255 for "touch", 0 otherwise) and a `distance` from the initially measured depth in mm.
+    ///
+    /// **Note**: This function does nothing if the current frame in device is not a depth frame. Call `get_depth_mm_u16_frame()` or `get_depth_scaled_u8_frame()` before calling `process()`.
     pub fn process<Device: Data>(
         &mut self,
         device: &Device,
@@ -74,11 +72,7 @@ impl TouchDetector {
         distance: &mut [f32],
     ) {
         // check if current frame holds a depth frame
-        if device
-            .get_current_frame_type()
-            .as_ref()
-            .is_some_and(|f| *f == FrameType::Depth)
-        {
+        if device.current_frame_is_depth() {
             unsafe {
                 let p = match std::ptr::slice_from_raw_parts(
                     device.get_frame_p_frame_data(),
@@ -139,7 +133,7 @@ impl TouchDetector {
         }
     }
 
-    /// The baseline depth as the average of the first baseline_sample_size frames
+    /// The baseline depth as the average of the first `baseline_sample_size` frames.
     pub fn get_baseline(&self) -> Vec<f32> {
         let mut base_line = new_fixed_vec(self.baseline_depth_sum.len(), 0.0);
         for (a, b) in zip(self.baseline_depth_sum.as_slice(), base_line.as_mut_slice()) {

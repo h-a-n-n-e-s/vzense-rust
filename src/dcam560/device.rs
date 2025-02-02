@@ -1,20 +1,22 @@
-//! Basic routines to initialize or shut down a device.
+//! Basic routines to initialize or shut down a device and to set/get parameters.
 
 use std::{ffi::CStr, thread::sleep, time::Duration};
 
 use sys::PsReturnStatus_PsRetOK as OK;
 use vzense_sys::dcam560 as sys;
 
-use crate::{ColorFormat, ColorResolution, DepthRange, FrameType, Resolution, DEFAULT_RESOLUTION};
+use crate::{ColorFormat, ColorResolution, DepthMeasuringRange, Resolution};
 
 use super::SESSION_INDEX;
 
-/// Device is a wrapper for the raw pointer `handle` used in every `sys` function. It also contains `frame_ready` (containing frame availability data) and `frame` (containing frame data).
+/// A wrapper for the raw pointer `handle` used in every `vzense_sys` call. It also includes `frame_ready` (containing frame availability data) and `frame` (containing a pointer to the actual frame data).
 pub struct Device {
     pub(super) handle: sys::PsDeviceHandle,
     pub(super) frame_ready: sys::PsFrameReady,
     pub(super) frame: sys::PsFrame,
-    pub(super) current_frame_type: Option<FrameType>,
+    pub(super) color_resolution: ColorResolution,
+    pub(super) color_is_mapped: bool,
+    pub(super) current_frame_is_depth: bool,
     pub(super) min_depth_mm: u16,
     pub(super) max_depth_mm: u16,
 }
@@ -101,6 +103,12 @@ impl Device {
                 println!("stream started, data mode: {}", data_mode);
             }
 
+            sys::Ps2_SetRGBResolution(
+                device.handle,
+                SESSION_INDEX,
+                sys::PsResolution_PsRGB_Resolution_640_480,
+            );
+
             Ok(device)
         }
     }
@@ -116,7 +124,9 @@ impl Device {
                 handle,
                 frame_ready: sys::PsFrameReady::default(),
                 frame: sys::PsFrame::default(),
-                current_frame_type: None,
+                color_resolution: ColorResolution::Res640x480,
+                color_is_mapped: false,
+                current_frame_is_depth: false,
                 min_depth_mm: 500,  // default value
                 max_depth_mm: 1000, // default value
             })
@@ -125,13 +135,15 @@ impl Device {
         }
     }
 
+    /// Choosing the min/max depth in mm for the color mapping of the depth output. These values also bound the depths used in the `util::TochDetector` to reduce measuring artifacts.
     pub fn set_depth_range(&mut self, min_depth_mm: u16, max_depth_mm: u16) {
         self.min_depth_mm = min_depth_mm;
         self.max_depth_mm = max_depth_mm;
     }
 
-    pub fn get_frame_info(&self) -> sys::PsFrame {
-        self.frame
+    /// Get frame info like frame type, pixel format, width, height, etc.
+    pub fn get_frame_info(&self) -> String {
+        format!("{:?}", self.frame)
     }
 
     /// Checks if the number of pixels in `frame` equals `pixel_count`.
@@ -143,25 +155,7 @@ impl Device {
         }
     }
 
-    /// Enable or disable the mapping of the color image to depth camera space.
-    pub fn map_color_to_depth(&self, is_enabled: bool) {
-        let color_resolution = self.get_color_resolution();
-        if color_resolution != DEFAULT_RESOLUTION {
-            self.set_color_resolution(ColorResolution::Res640x480);
-        }
-        unsafe {
-            // should actually be `Ps2_SetMapperEnabledRGBToDepth` but the names seem to be mixed up
-            sys::Ps2_SetMapperEnabledDepthToRGB(
-                self.handle,
-                SESSION_INDEX,
-                if is_enabled { 1 } else { 0 },
-            );
-            // let mut is_mapped = 0;
-            // sys::scGetTransformColorImgToDepthSensorEnabled(self.handle, &mut is_mapped);
-            // println!("is_mapped: {}", is_mapped);
-        }
-    }
-
+    /// Set the color frame format to either RGB or BGR.
     pub fn set_color_format(&self, format: ColorFormat) {
         unsafe {
             match format {
@@ -179,29 +173,40 @@ impl Device {
         }
     }
 
-    /// Sets the resolution of the color frame. Three resolutions are currently available: 640x480, 800x600, and 1600x1200.
-    pub fn set_color_resolution(&self, resolution: ColorResolution) {
+    /// Enable or disable the mapping of the color image to depth camera space.
+    pub fn map_color_to_depth(&mut self, is_enabled: bool) {
+        if self.color_resolution != ColorResolution::Res640x480 {
+            self.set_color_resolution(ColorResolution::Res640x480);
+        }
         unsafe {
-            let mut resolution = match resolution {
+            // should actually be `Ps2_SetMapperEnabledRGBToDepth` but the names seem to be mixed up
+            sys::Ps2_SetMapperEnabledDepthToRGB(
+                self.handle,
+                SESSION_INDEX,
+                if is_enabled { 1 } else { 0 },
+            );
+        }
+        self.color_is_mapped = is_enabled;
+    }
+
+    /// Sets the resolution of the color frame. Three resolutions are currently available: 640x480, 800x600, and 1600x1200.
+    pub fn set_color_resolution(&mut self, resolution: ColorResolution) -> Resolution {
+        if self.color_is_mapped {
+            println!(
+                "setting of color resolution is ignored because color frame is mapped to depth"
+            );
+        } else {
+            let res = match resolution {
                 ColorResolution::Res640x480 => sys::PsResolution_PsRGB_Resolution_640_480,
                 ColorResolution::Res800x600 => sys::PsResolution_PsRGB_Resolution_800_600,
                 ColorResolution::Res1600x1200 => sys::PsResolution_PsRGB_Resolution_1600_1200,
             };
-
-            // check if rgb is mapped to depth
-            let mut is_mapped = 0;
-            // should actually be `Ps2_GetMapperEnabledRGBToDepth` but the names seem to be mixed up
-            sys::Ps2_GetMapperEnabledDepthToRGB(self.handle, SESSION_INDEX, &mut is_mapped);
-
-            if is_mapped == 1 {
-                resolution = sys::PsResolution_PsRGB_Resolution_640_480;
-                println!(
-                    "setting of rgb resolution is ignored because color frame is mapped to depth"
-                )
+            unsafe {
+                sys::Ps2_SetRGBResolution(self.handle, SESSION_INDEX, res);
             }
-
-            sys::Ps2_SetRGBResolution(self.handle, SESSION_INDEX, resolution);
+            self.color_resolution = resolution;
         }
+        self.get_color_resolution()
     }
 
     /// Returns the resolution of the color frame.
@@ -219,18 +224,18 @@ impl Device {
     }
 
     /// Sets the depth range mode.
-    pub fn set_depth_measuring_range_dcam560(&self, depth_range: DepthRange) {
+    pub fn set_depth_measuring_range(&self, depth_range: DepthMeasuringRange) {
         let depth_range = match depth_range {
-            DepthRange::Near => 0,
-            DepthRange::Mid => 1,
-            DepthRange::Far => 2,
+            DepthMeasuringRange::Near => 0,
+            DepthMeasuringRange::Mid => 1,
+            DepthMeasuringRange::Far => 2,
         };
         unsafe {
             sys::Ps2_SetDepthRange(self.handle, SESSION_INDEX, depth_range);
         }
     }
 
-    /// Returns the current measuring range `(min, max)` of the camera in mm
+    /// Returns the current depth measuring range `(min, max)` of the camera in mm.
     pub fn get_depth_measuring_range(&self) -> (u16, u16) {
         unsafe {
             let mut depth_range = sys::PsDepthRange::default();
@@ -266,7 +271,7 @@ impl Device {
     }
 }
 
-/// implement trait Data to allow use of Device in touch_detector
+/// `Data` trait to allow use of `Device` in `util::TouchDetector`.
 impl crate::util::touch_detector::Data for Device {
     fn get_frame_p_frame_data(&self) -> *mut u8 {
         self.frame.pFrameData
@@ -280,41 +285,7 @@ impl crate::util::touch_detector::Data for Device {
     fn get_max_depth_mm(&self) -> u16 {
         self.max_depth_mm
     }
-    fn get_current_frame_type(&self) -> &Option<FrameType> {
-        &self.current_frame_type
+    fn current_frame_is_depth(&self) -> bool {
+        self.current_frame_is_depth
     }
 }
-
-/*
-/// Device is a wrapper for the raw pointer `handle`
-pub struct Device {
-    pub handle: sys::PsDeviceHandle,
-}
-impl Device {
-    fn open_device_by_uri(uri: *const i8) -> Result<Self, String> {
-        let handle = &mut (0 as sys::PsDeviceHandle);
-        let status = unsafe { sys::Ps2_OpenDevice(uri, handle) };
-        if status != OK {
-            return Err(format!("open device failed with status {}", status));
-        }
-        if !handle.is_null() {
-            Ok(Device { handle: *handle })
-        } else {
-            Err("device ptr is null".to_string())
-        }
-    }
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-*/
