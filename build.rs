@@ -2,27 +2,42 @@ use std::path::Path;
 use std::{fs, io};
 
 fn main() {
-    // decompress the vzense-lib directory
-    std::process::Command::new("unxz")
-        .arg("vzense-lib.tar.xz")
-        .output()
-        .expect("could not unxz vzense-lib directory");
-
-    // untar
-    std::process::Command::new("tar")
-        .arg("-xvf")
-        .arg("vzense-lib.tar")
-        .output()
-        .expect("could not untar vzense-lib directory");
-
     /*
     Shared libraries need to be within the target dir, see
     https://doc.rust-lang.org/cargo/reference/environment-variables.html#dynamic-library-paths
 
-    Therefore, libraries are symlinked from vzense_lib/ to target/<buildType>/deps/.
+    Therefore, libraries are first extracted from `vzense-lib.tar.xz`` to `targst/vzense_lib/` and then symlinked from there to target/<buildType>/deps/.
     */
 
-    let lib_src = std::env::current_dir().unwrap().join("vzense-lib");
+    let lib_src = std::env::current_dir().unwrap().join("target/vzense-lib");
+
+    // check if libraries have been extracted already
+    if !lib_src.exists() {
+        std::fs::copy("vzense-lib.tar.xz", "target/vzense-lib.tar.xz")
+            .expect("could not copy vzense-lib");
+
+        // decompress the vzense-lib directory
+        std::process::Command::new("unxz")
+            .current_dir("target/")
+            .arg("vzense-lib.tar.xz")
+            .output()
+            .expect("could not unxz vzense-lib");
+
+        // untar
+        std::process::Command::new("tar")
+            .current_dir("target/")
+            .arg("-xf")
+            .arg("vzense-lib.tar")
+            .output()
+            .expect("could not untar vzense-lib");
+
+        // rm tar
+        std::process::Command::new("rm")
+            .current_dir("target/")
+            .arg("vzense-lib.tar")
+            .output()
+            .unwrap();
+    }
 
     let mut deps_path = std::env::current_exe().unwrap();
     for _ in 0..3 {
