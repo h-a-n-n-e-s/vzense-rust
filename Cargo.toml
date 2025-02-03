@@ -1,12 +1,12 @@
 [package]
 name = "vzense-rust"
-version = "0.1.7"
+version = "0.2.0"
 edition = "2021"
 description = "High-level library for Vzense cameras"
 categories = ["external-ffi-bindings", "computer-vision", "hardware-support"]
 repository = "https://github.com/h-a-n-n-e-s/vzense-rust"
 readme = "README.md"
-license = "MIT"
+license = "MIT AND BSD-3-Clause"
 authors = ["Johannes Schoenke"]
 
 [dependencies]
@@ -16,15 +16,16 @@ vzense-sys = { path = "vzense-sys" }
 show-image = "0.14.0"
 
 [features]
-# for debugging purpose only
-# default = ["dcam560"]
-# uses the older API specifically for the DCAM560 model
 dcam560 = []
+# uses the older API specifically for the DCAM560 model
+# default = ["dcam560"]
+
 # recreates the bindings for vzense-sys
-run-bindgen = ["vzense-sys/run-bindgen"]
+# run-bindgen = ["vzense-sys/run-bindgen"]
 
-# [profile.dev]
-# rpath = true
 
-# [profile.release]
-# rpath = true
+[profile.dev]
+rpath = true
+
+[profile.release]
+rpath = true

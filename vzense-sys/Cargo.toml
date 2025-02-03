@@ -1,11 +1,11 @@
 [package]
 name = "vzense-sys"
-version = "0.1.4"
+version = "0.2.0"
 edition = "2021"
 description = "Rust abstraction layer for the Vzense SDK C library"
 repository = "https://github.com/h-a-n-n-e-s/vzense-rust/vzense-sys"
 readme = "README.md"
-license = "MIT"
+license = "BSD-3-Clause"
 authors = ["Johannes Schoenke"]
 
 [build-dependencies]

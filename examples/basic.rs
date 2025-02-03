@@ -2,11 +2,11 @@
 This example covers all the functionality provided by the library. It connects to a device, starts a stream, and displays the received data. The `touch_detector` is a very simple example of image processing, using depth data to detect touch events.
 */
 
-// by default using the newest Scepter API
+// By default using the newest Scepter API.
 #[cfg(not(feature = "dcam560"))]
 use vzense_rust::scepter as camera_api;
 
-// uses the older API specifically for the DCAM560 model
+// Uses an older API specifically for the DCAM560 model.
 #[cfg(feature = "dcam560")]
 use vzense_rust::dcam560 as camera_api;
 
@@ -34,7 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    // Choosing the depth measuring range for DCAM560 (Near, Mid, or Far)
+    // Choose the depth measuring range for DCAM560 (Near, Mid, or Far).
     #[cfg(feature = "dcam560")]
     {
         device.set_depth_measuring_range(vzense_rust::DepthMeasuringRange::Near);
@@ -46,21 +46,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Choose between RGB and BGR color format, default is BGR.
     device.set_color_format(ColorFormat::Rgb);
 
-    // Choosing the min/max depth in mm for the color mapping of the depth output. These values also bound the depths used in the `TochDetector` to reduce measuring artifacts. In the specs the depth measuring range for the NYX650 is given as min: 300 mm, max: 4500 mm. The depth measuring range for the DCAM560 depends on the range chosen above.
+    // Choose the min/max depth in mm for the color mapping of the depth output. These values also bound the depths used in the `TochDetector` to reduce measuring artifacts. In the specs the depth measuring range for the NYX650 is given as min: 300 mm, max: 4500 mm. The depth measuring range for the DCAM560 depends on the range chosen above.
     device.set_depth_range(160, 1100);
 
+    // Initialize the touch detector.
     let mut touch_detector = TouchDetector::new(&device, 5.0, 50.0, 30, 5, DEFAULT_PIXEL_COUNT);
 
-    // Mapping the color to the depth frame. If set to true, the color_resolution is set to 640x480.
-    device.map_color_to_depth(true);
+    // Mapping color to depth frame. If set to true, the color_resolution is fixed to 640x480.
+    device.map_color_to_depth(false);
 
     // Setting the color resolution. If not set the default will be 640x480.
     // If color is mapped to depth, color resolution setting will be ignored.
     let color_resolution = device.set_color_resolution(ColorResolution::Res800x600);
 
-    println!("{:?}", color_resolution.to_array());
-
-    // vectors to store image data
+    // Vectors to store image data.
 
     // let mut ir = new_fixed_vec(DEFAULT_PIXEL_COUNT, 0u8); // 8 bit per pixel
     // let mut depth_mm = new_fixed_vec(DEFAULT_PIXEL_COUNT, 0u16); // 16 bit per pixel
@@ -71,7 +70,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut depth_rgb = new_fixed_vec(3 * DEFAULT_PIXEL_COUNT, 0u8); // 24 bit per pixel
     let mut color_rgb = new_fixed_vec(3 * color_resolution.to_pixel_count(), 0u8); // 24 bit per pixel
 
-    // creating the image windows, `double()` doubles the size of the window in both dimensions
+    // Creating the image windows, `double()` doubles the size of the window in both dimensions.
 
     // let ir_window = create_window("ir", &DEFAULT_RESOLUTION.double(), true);
     let depth_window = create_window("depth", &DEFAULT_RESOLUTION.double(), true);
@@ -80,6 +79,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let stop = KeyboardEvent::new("\n");
 
+    // For fps and frame count output.
     let mut counter = Counter::new(10);
 
     let mut init = true;
@@ -89,14 +89,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     loop {
         // `read_next_frame()` must be called at the beginning of each loop to retrieve new data.
 
-        // Scepter API has an additional `max_wait_time_ms` paramter
+        // Scepter API has an additional `max_wait_time_ms` paramter.
         #[cfg(not(feature = "dcam560"))]
         read_next_frame(&mut device, 100);
 
         #[cfg(feature = "dcam560")]
         read_next_frame(&mut device);
 
-        // ir (only for Scepter API) __________________________________________
+        // IR (only for Scepter API) __________________________________________
 
         // get_ir_frame(&mut device, &mut ir);
 

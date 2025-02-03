@@ -7,6 +7,8 @@ use vzense_sys::scepter as sys;
 
 use crate::{ColorFormat, ColorResolution, Resolution};
 
+use super::get_message;
+
 /// A wrapper for the raw pointer `handle` used in every `vzense_sys` call. It also includes `frame_ready` (containing frame availability data) and `frame` (containing a pointer to the actual frame data).
 pub struct Device {
     pub(super) handle: sys::ScDeviceHandle,
@@ -26,14 +28,20 @@ impl Device {
 
             let mut status = sys::scInitialize();
             if status != OK {
-                return Err(format!("initialization failed with status {}", status));
+                return Err(format!(
+                    "initialization failed with status {}",
+                    get_message(status)
+                ));
             }
 
             let mut device_count = 0;
             println!("searching for device... ");
             status = sys::scGetDeviceCount(&mut device_count, 3000);
             if status != OK {
-                return Err(format!("get device count failed with status {}", status));
+                return Err(format!(
+                    "get device count failed with status {}",
+                    get_message(status)
+                ));
             } else if device_count > 0 {
                 println!("device found");
             } else {
@@ -53,7 +61,7 @@ impl Device {
             if status != OK {
                 return Err(format!(
                     "get firmware version failed with status {}",
-                    status
+                    get_message(status)
                 ));
             }
 
@@ -70,12 +78,18 @@ impl Device {
             let mut work_mode = sys::ScWorkMode::default();
             status = sys::scGetWorkMode(device.handle, &mut work_mode);
             if status != OK {
-                return Err(format!("get work mode failed with status {}", status));
+                return Err(format!(
+                    "get work mode failed with status {}",
+                    get_message(status)
+                ));
             }
 
             status = sys::scStartStream(device.handle);
             if status != OK {
-                return Err(format!("start stream failed with status {}", status));
+                return Err(format!(
+                    "start stream failed with status {}",
+                    get_message(status)
+                ));
             } else {
                 println!("stream started, work mode: {}", work_mode);
             }
@@ -90,7 +104,10 @@ impl Device {
         let mut handle = 0 as sys::ScDeviceHandle;
         let status = unsafe { sys::scOpenDeviceByIP(ip, &mut handle) };
         if status != OK {
-            return Err(format!("open device failed with status {}", status));
+            return Err(format!(
+                "open device failed with status {}",
+                get_message(status)
+            ));
         }
         if !handle.is_null() {
             Ok(Device {
@@ -209,7 +226,7 @@ impl Device {
 
             let status = sys::scShutdown();
             if status != OK {
-                println!("shut down failed with status: {}", status);
+                println!("shut down failed with status: {}", get_message(status));
             } else {
                 println!("shut down device successfully");
             }

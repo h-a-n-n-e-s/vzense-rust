@@ -3,52 +3,51 @@
 pub mod device;
 pub mod frame;
 
-/// Status codes.
-pub fn get_status_codes() -> [String; 255] {
-    let mut status = [const { String::new() }; 255];
-
-    status[0] = "OK".to_string(); // The function completed successfully.
-    status[1] = "DEVICE_IS_LIMBO".to_string(); // The device is limbo
-    status[2] = "INVALID_DEVICE_INDEX".to_string(); // The input device index is invalid.
-    status[3] = "DEVICE_POINTER_IS_NULL".to_string(); // The device structure pointer is null.
-    status[4] = "INVALID_FRAME_TYPE".to_string(); // The input frame type is invalid.
-    status[5] = "FRAME_POINTER_IS_NULL".to_string(); // The output frame buffer is null.
-    status[6] = "NO_PROPERTY_VALUE_GET".to_string(); // Cannot get the value for the specified property.
-    status[7] = "NO_PROPERTY_VALUE_SET".to_string(); // Cannot set the value for the specified property.
-    status[8] = "PROPERTY_POINTER_IS_NULL".to_string(); // The input property value buffer pointer is null.
-    status[9] = "PROPERTY_SIZE_NOT_ENOUGH".to_string(); // The input property value buffer size is too small to store the specified property value.
-    status[10] = "INVALID_DEPTH_RANGE".to_string(); // The input depth range mode is invalid.
-    status[11] = "GET_FRAME_READY_TIME_OUT".to_string(); // Capture the next image frame time out.
-    status[12] = "INPUT_POINTER_IS_NULL".to_string(); // An input pointer parameter is null.
-    status[13] = "CAMERA_NOT_OPENED".to_string(); // The camera has not been opened.
-    status[14] = "INVALID_CAMERA_TYPE".to_string(); // The specified type of camera is invalid.
-    status[15] = "INVALID_PARAMS".to_string(); // One or more of the parameter values provided are invalid.
-    status[16] = "CURRENT_VERSION_NOT_SUPPORT".to_string(); // This feature is not supported in the current version.
-    status[17] = "UPGRADE_IMG_ERROR".to_string(); // There is an error in the upgrade file.
-    status[18] = "UPGRADE_IMG_PATH_TOO_LONG".to_string(); // Upgrade file path length greater than 260.
-    status[19] = "UPGRADE_CALLBACK_NOT_SET".to_string(); // scSetUpgradeStatusCallback is not called.
-    status[20] = "PRODUCT_NOT_SUPPORT".to_string(); // The current product does not support this operation.
-    status[21] = "NO_CONFIG_FOLDER".to_string(); // No product profile found.
-    status[22] = "WEB_SERVER_START_ERROR".to_string(); // WebServer Start/Restart error(IP or PORT 8080).
-    status[23] = "GET_OVER_STAY_FRAME".to_string(); // The time from frame ready to get frame is out of 1s.
-    status[24] = "CREATE_LOG_DIR_ERROR".to_string(); // Create log directory error.
-    status[25] = "CREATE_LOG_FILE_ERROR".to_string(); // Create log file error.
-    status[100] = "NO_ADAPTER_CONNECTED".to_string(); // There is no adapter connected.
-    status[101] = "REINITIALIZED".to_string(); // The SDK has been Initialized.
-    status[102] = "NO_INITIALIZED".to_string(); // The SDK has not been Initialized.
-    status[103] = "CAMERA_OPENED".to_string(); // The camera has been opened.
-    status[104] = "CMD_ERROR".to_string(); // Set/Get cmd control error.
-    status[105] = "CMD_SYNC_TIME_OUT".to_string(); // Set cmd ok.but time out for the sync return.
-    status[106] = "IP_NOT_MATCH".to_string(); // IP is not in the same network segment.
-    status[107] = "NOT_STOP_STREAM".to_string(); // Please invoke scStopStream first to close the data stream.
-    status[108] = "NOT_START_STREAM".to_string(); // Please invoke scStartStream first to get the data stream.
-    status[109] = "NOT_FIND_DRIVERS_FOLDER".to_string(); // Please check whether the Drivers directory exists.
-    status[110] = "CAMERA_OPENING".to_string(); // The camera is openin,by another Sc_OpenDeviceByXXX API.
-    status[111] = "CAMERA_OPENED_BY_ANOTHER_APP".to_string(); // The camera has been opened by another APP.
-    status[112] = "GET_AI_RESULT_TIME_OUT".to_string(); // Capture the next AI result time out.
-    status[113] = "MORPH_AI_LIB_ERROR".to_string(); // The morph Al library is not exist or initialized failed.
-    status[114] = "CPU_AFFINITY_CHECK_FAILED".to_string(); // The cpu affinity config file check failed
-    status[255] = "OTHERS".to_string(); // An unknown error occurred.
-
-    status
+/// Status messages from numeric code.
+const fn get_message(code: i32) -> &'static str {
+    match code {
+        0 => "OK",                              // The function completed successfully.
+        -1 => "DEVICE_IS_LIMBO",                // The device is limbo
+        -2 => "INVALID_DEVICE_INDEX",           // The input device index is invalid.
+        -3 => "DEVICE_POINTER_IS_NULL",         // The device structure pointer is null.
+        -4 => "INVALID_FRAME_TYPE",             // The input frame type is invalid.
+        -5 => "FRAME_POINTER_IS_NULL",          // The output frame buffer is null.
+        -6 => "NO_PROPERTY_VALUE_GET",          // Cannot get the value for the specified property.
+        -7 => "NO_PROPERTY_VALUE_SET",          // Cannot set the value for the specified property.
+        -8 => "PROPERTY_POINTER_IS_NULL",       // The input property value buffer pointer is null.
+        -9 => "PROPERTY_SIZE_NOT_ENOUGH", // The input property value buffer size is too small to store the specified property value.
+        -10 => "INVALID_DEPTH_RANGE",     // The input depth range mode is invalid.
+        -11 => "GET_FRAME_READY_TIME_OUT", // Capture the next image frame time out.
+        -12 => "INPUT_POINTER_IS_NULL",   // An input pointer parameter is null.
+        -13 => "CAMERA_NOT_OPENED",       // The camera has not been opened.
+        -14 => "INVALID_CAMERA_TYPE",     // The specified type of camera is invalid.
+        -15 => "INVALID_PARAMS", // One or more of the parameter values provided are invalid.
+        -16 => "CURRENT_VERSION_NOT_SUPPORT", // This feature is not supported in the current version.
+        -17 => "UPGRADE_IMG_ERROR",           // There is an error in the upgrade file.
+        -18 => "UPGRADE_IMG_PATH_TOO_LONG",   // Upgrade file path length greater than 260.
+        -19 => "UPGRADE_CALLBACK_NOT_SET",    // scSetUpgradeSTATUSCallback is not called.
+        -20 => "PRODUCT_NOT_SUPPORT", // The current product does not support this operation.
+        -21 => "NO_CONFIG_FOLDER",    // No product profile found.
+        -22 => "WEB_SERVER_START_ERROR", // WebServer Start/Restart error(IP or PORT 8080).
+        -23 => "GET_OVER_STAY_FRAME", // The time from frame ready to get frame is out of 1s.
+        -24 => "CREATE_LOG_DIR_ERROR", // Create log directory error.
+        -25 => "CREATE_LOG_FILE_ERROR", // Create log file error.
+        -100 => "NO_ADAPTER_CONNECTED", // There is no adapter connected.
+        -101 => "REINITIALIZED",      // The SDK has been Initialized.
+        -102 => "NO_INITIALIZED",     // The SDK has not been Initialized.
+        -103 => "CAMERA_OPENED",      // The camera has been opened.
+        -104 => "CMD_ERROR",          // Set/Get cmd control error.
+        -105 => "CMD_SYNC_TIME_OUT",  // Set cmd ok.but time out for the sync return.
+        -106 => "IP_NOT_MATCH",       // IP is not in the same network segment.
+        -107 => "NOT_STOP_STREAM",    // Please invoke scStopStream first to close the data stream.
+        -108 => "NOT_START_STREAM",   // Please invoke scStartStream first to get the data stream.
+        -109 => "NOT_FIND_DRIVERS_FOLDER", // Please check whether the Drivers directory exists.
+        -110 => "CAMERA_OPENING",     // The camera is openin,by another Sc_OpenDeviceByXXX API.
+        -111 => "CAMERA_OPENED_BY_ANOTHER_APP", // The camera has been opened by another APP.
+        -112 => "GET_AI_RESULT_TIME_OUT", // Capture the next AI result time out.
+        -113 => "MORPH_AI_LIB_ERROR", // The morph Al library is not exist or initialized failed.
+        -114 => "CPU_AFFINITY_CHECK_FAILED", // The cpu affinity config file check failed
+        -255 => "OTHERS",             // An unknown error occurred.
+        _ => "_",
+    }
 }
