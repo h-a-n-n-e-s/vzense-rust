@@ -2,6 +2,12 @@ use std::path::Path;
 use std::{fs, io};
 
 fn main() {
+    // decompress the vzense-lib directory
+    std::process::Command::new("unxz")
+        .arg("vzense-lib.tar.xz")
+        .output()
+        .expect("could not decompress vzense-lib directory");
+
     /*
     Shared libraries need to be within the target dir, see
     https://doc.rust-lang.org/cargo/reference/environment-variables.html#dynamic-library-paths
