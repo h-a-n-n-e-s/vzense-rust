@@ -20,7 +20,7 @@ The [basic](examples/basic.rs) example covers all the functionality provided by 
 
 The [`show-image`](https://docs.rs/show-image/latest/show_image) crate is useds to display the data.  
 
-If an executable is used on a machine it was not built on, make sure it can find the shared libraries in `vzense-lib/`.
+If an executable is used on a machine it was not built on, make sure it can find the shared libraries in `vzense-lib.tar.xz`.
 
 **Note**: There is an issue that data for the "color mapped to depth frame" is not available for the NYX650 camera if running with `--release`. Please see [here](https://users.rust-lang.org/t/raw-pointer-contains-no-data-when-running-in-release/122814/16) for details.
 
