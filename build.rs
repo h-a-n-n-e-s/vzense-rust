@@ -6,7 +6,14 @@ fn main() {
     std::process::Command::new("unxz")
         .arg("vzense-lib.tar.xz")
         .output()
-        .expect("could not decompress vzense-lib directory");
+        .expect("could not unxz vzense-lib directory");
+
+    // untar
+    std::process::Command::new("tar")
+        .arg("-xvf")
+        .arg("vzense-lib.tar")
+        .output()
+        .expect("could not untar vzense-lib directory");
 
     /*
     Shared libraries need to be within the target dir, see
