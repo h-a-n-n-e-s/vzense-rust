@@ -1,5 +1,0 @@
-string enum from bindgen?
-https://github.com/rustwasm/wasm-bindgen/issues/3057
-https://users.rust-lang.org/t/how-to-display-constants-as-its-name-for-rust-when-debug/96829
-
-add status codes?
