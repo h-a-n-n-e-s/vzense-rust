@@ -10,7 +10,7 @@ license = "MIT AND BSD-3-Clause"
 authors = ["Johannes Schoenke"]
 
 [dependencies]
-vzense-sys = { path = "vzense-sys" }
+vzense-sys = { path = "vzense-sys", version = "0.2.0"}
 
 [dev-dependencies]
 show-image = "0.14.0"
