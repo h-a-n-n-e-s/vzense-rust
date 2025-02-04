@@ -19,6 +19,10 @@ fn main() {
             let base_path = std::env::current_dir().unwrap();
             let target_path = base_path.join("target");
 
+            if !target_path.exists() {
+                fs::create_dir(target_path.clone()).unwrap();
+            }
+
             std::fs::copy(
                 base_path.join("vzense-lib.tar.xz"),
                 target_path.join("vzense-lib.tar.xz"),
