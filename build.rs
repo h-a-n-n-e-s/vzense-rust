@@ -1,6 +1,8 @@
 use std::path::Path;
 use std::{fs, io};
 
+// prevent running main() for docs.rs
+#[cfg(not(feature = "docsrs"))]
 fn main() {
     /*
     Shared libraries need to be within the target dir, see
