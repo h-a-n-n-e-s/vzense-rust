@@ -16,19 +16,25 @@ fn main() {
 
         // check if libraries have been extracted already
         if !lib_src.exists() {
-            std::fs::copy("vzense-lib.tar.xz", "target/vzense-lib.tar.xz")
-                .expect(&format!("could not copy vzense-lib {:?}", std::env::current_dir().unwrap()));
+            let base_path = std::env::current_dir().unwrap();
+            let target_path = base_path.join("target");
+
+            std::fs::copy(
+                base_path.join("vzense-lib.tar.xz"),
+                target_path.join("vzense-lib.tar.xz"),
+            )
+            .expect("could not copy vzense-lib");
 
             // decompress the vzense-lib directory
             std::process::Command::new("unxz")
-                .current_dir("target/")
+                .current_dir(target_path.clone())
                 .arg("vzense-lib.tar.xz")
                 .output()
                 .expect("could not unxz vzense-lib");
 
             // untar
             std::process::Command::new("tar")
-                .current_dir("target/")
+                .current_dir(target_path.clone())
                 .arg("-xf")
                 .arg("vzense-lib.tar")
                 .output()
@@ -36,7 +42,7 @@ fn main() {
 
             // rm tar
             std::process::Command::new("rm")
-                .current_dir("target/")
+                .current_dir(target_path)
                 .arg("vzense-lib.tar")
                 .output()
                 .unwrap();
