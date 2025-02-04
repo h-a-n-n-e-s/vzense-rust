@@ -23,7 +23,7 @@ fn main() {
                 base_path.join("vzense-lib.tar.xz"),
                 target_path.join("vzense-lib.tar.xz"),
             )
-            .expect("could not copy vzense-lib");
+            .expect(&format!("could not copy vzense-lib {:?}", base_path.join("vzense-lib.tar.xz")));
 
             // decompress the vzense-lib directory
             std::process::Command::new("unxz")
