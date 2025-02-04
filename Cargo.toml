@@ -1,6 +1,6 @@
 [package]
 name = "vzense-rust"
-version = "0.2.6"
+version = "0.2.7"
 edition = "2021"
 description = "High-level library for Vzense cameras"
 categories = ["external-ffi-bindings", "computer-vision", "hardware-support"]

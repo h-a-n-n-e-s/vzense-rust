@@ -45,11 +45,11 @@ fn main() {
                 .expect("could not untar vzense-lib");
 
             // rm tar
-            std::process::Command::new("rm")
-                .current_dir(target_path)
-                .arg("vzense-lib.tar")
-                .output()
-                .unwrap();
+            // std::process::Command::new("rm")
+            //     .current_dir(target_path)
+            //     .arg("vzense-lib.tar")
+            //     .output()
+            //     .unwrap();
         }
 
         let mut deps_path = std::env::current_exe().unwrap();
