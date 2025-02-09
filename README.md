@@ -18,9 +18,9 @@ The `scepter` module is used by default. To use the `dcam560` module, set `defau
 
 The [basic](examples/basic.rs) example covers all the functionality provided by the library and can be run with `cargo run --example basic`. To stream with maximum frame rate add `--release`.
 
-The [`show-image`](https://docs.rs/show-image/latest/show_image) crate is useds to display the data.  
+The [`show-image`](https://docs.rs/show-image/latest/show_image) crate is used to display data.  
 
-If an executable is used on a machine it was not built on, make sure it can find the shared libraries in `vzense-lib.tar.xz`.
+For a standalone binary to find links (stored in `<projectDir>/target/<buildType>/deps/`) to the shared dynamic libraries, one can use for example [chrpath](https://linux.die.net/man/1/chrpath) to set the rpath accordingly after the build with `chrpath -r <projectDir>/target/<buildType>/deps/ <binary>`.
 
 **Note**: There is an issue that data for the "color mapped to depth frame" is not available for the NYX650 camera if running with `--release`. Please see [here](https://users.rust-lang.org/t/raw-pointer-contains-no-data-when-running-in-release/122814/16) for details.
 
