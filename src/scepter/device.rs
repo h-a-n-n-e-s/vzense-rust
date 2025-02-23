@@ -1,5 +1,6 @@
 //! Basic routines to initialize or shut down a device and to set/get parameters.
 
+use std::os::raw::c_char;
 use std::ffi::CStr;
 use sys::ScStatus_SC_OK as OK;
 
@@ -51,28 +52,16 @@ impl Device {
             let mut device_info = sys::ScDeviceInfo::default();
 
             sys::scGetDeviceInfoList(device_count, &mut device_info);
-            let ip = device_info.ip.as_ptr();
+            let ip: *const c_char = device_info.ip.as_ptr();
             let model = device_info.productName.as_ptr();
 
             let device = Device::open_device_by_ip(ip).unwrap();
-
-            let mut firmware = [0; 64];
-            status = sys::scGetFirmwareVersion(device.handle, firmware.as_mut_ptr(), 64);
-            if status != OK {
-                return Err(format!(
-                    "get firmware version failed with status {}",
-                    get_message(status)
-                ));
-            }
 
             println!(
                 "model: {}, IP: {}, firmware: {}",
                 CStr::from_ptr(model).to_str().unwrap(),
                 CStr::from_ptr(ip).to_str().unwrap(),
-                CStr::from_bytes_until_nul(std::mem::transmute::<&[i8], &[u8]>(&firmware))
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
+                device.get_firmware_version().expect("Cannot get firmware version"),
             );
 
             let mut work_mode = sys::ScWorkMode::default();
@@ -100,7 +89,15 @@ impl Device {
         }
     }
 
-    fn open_device_by_ip(ip: *const i8) -> Result<Self, String> {
+    fn get_firmware_version(&self) -> Result<String, String> {
+        let mut buffer = [0; 64];
+        match get_firmware_version(self.handle, &mut buffer) {
+            OK => Ok(CStr::from_bytes_until_nul(&buffer).unwrap().to_string_lossy().into_owned()),
+            error_code => Err(format!("{}", error_code)),
+        }
+    }
+
+    fn open_device_by_ip(ip: *const c_char) -> Result<Self, String> {
         let mut handle = 0 as sys::ScDeviceHandle;
         let status = unsafe { sys::scOpenDeviceByIP(ip, &mut handle) };
         if status != OK {
@@ -251,4 +248,10 @@ impl crate::util::touch_detector::Data for Device {
     fn current_frame_is_depth(&self) -> bool {
         self.current_frame_is_depth
     }
+}
+
+fn get_firmware_version(handle: sys::ScDeviceHandle, buffer: &mut [u8]) -> sys::ScStatus {
+    let len = buffer.len().try_into().unwrap();
+    let ptr: *mut c_char = buffer.as_mut_ptr().cast();
+    unsafe { sys::scGetFirmwareVersion(handle, ptr, len) }
 }
