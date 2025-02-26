@@ -23,105 +23,119 @@ pub struct Device {
 impl Device {
     /// Initializes the sytem and returns a device if it finds one. Make sure a Vzense camera is connected. After 3 seconds the routine will time out if no device was found.
     pub fn init() -> Result<Self, String> {
-        unsafe {
-            println!("initializing...");
+        println!("initializing...");
+        if let Err(msg) = initialize(false) {
+            return Err(msg);
+        };
 
-            let mut status = sys::Ps2_Initialize();
+        let mut device_count = 0;
+        let mut times_tried = 0;
+        let mut status;
+        println!("searching for device...");
+        loop {
+            status = unsafe { sys::Ps2_GetDeviceCount(&mut device_count) };
             if status != OK {
-                return Err(format!("initialization failed with status {}", status));
-            }
-
-            let mut device_count = 0;
-            let mut times_tried = 0;
-            println!("searching for device...");
-            loop {
-                status = sys::Ps2_GetDeviceCount(&mut device_count);
-                if status != OK {
-                    return Err(format!("get device count failed with status {}", status));
-                } else {
-                    if device_count > 0 {
-                        print!("device found, ");
-                        break;
-                    }
-                    times_tried += 1;
-                    // give up after 3 seconds
-                    if times_tried == 15 {
-                        return Err("no device found".to_string());
-                    }
-                    sleep(Duration::from_millis(200));
-                }
-            }
-
-            let mut device_info = sys::PsDeviceInfo::default();
-
-            sys::Ps2_GetDeviceListInfo(&mut device_info, device_count);
-            let ip: *const c_char = device_info.ip.as_ptr();
-            let uri = device_info.uri.as_ptr(); // model_name:serial_number
-            // let alias = device_info.alias; // serial number
-
-            let device = Device::open_device_by_ip(ip).unwrap();
-
-            println!(
-                "model: {}, IP: {}, firmware: {}",
-                CStr::from_ptr(uri)
-                    .to_str()
-                    .unwrap()
-                    .split(":")
-                    .collect::<Vec<&str>>()[0],
-                CStr::from_ptr(ip).to_str().unwrap(),
-                device.get_firmware_version().expect("Cannot get firmware version"),
-            );
-
-            let mut data_mode = sys::PsDataMode::default();
-            status = sys::Ps2_GetDataMode(device.handle, SESSION_INDEX, &mut data_mode);
-            if status != OK {
-                return Err(format!("get data mode failed with status {}", status));
-            }
-
-            status = sys::Ps2_StartStream(device.handle, SESSION_INDEX);
-            if status != OK {
-                return Err(format!("start stream failed with status {}", status));
+                return Err(format!("get device count failed with status {}", status));
             } else {
-                println!("stream started, data mode: {}", data_mode);
+                if device_count > 0 {
+                    print!("device found, ");
+                    break;
+                }
+                times_tried += 1;
+                // give up after 3 seconds
+                if times_tried == 15 {
+                    return Err("no device found".to_string());
+                }
+                sleep(Duration::from_millis(200));
             }
-
-            sys::Ps2_SetRGBResolution(
-                device.handle,
-                SESSION_INDEX,
-                sys::PsResolution_PsRGB_Resolution_640_480,
-            );
-
-            Ok(device)
         }
-    }
 
-    fn get_firmware_version(&self) -> Result<String, String> {
-        let mut buffer = [0; 64];
-        match get_firmware_version(self.handle, &mut buffer) {
-            OK => Ok(CStr::from_bytes_until_nul(&buffer).unwrap().to_string_lossy().into_owned()),
-            error_code => Err(format!("{}", error_code)),
-        }
-    }
+        let mut device_info = sys::PsDeviceInfo::default();
 
-    fn open_device_by_ip(ip: *const c_char) -> Result<Self, String> {
-        let mut handle = 0 as sys::PsDeviceHandle;
-        let status = unsafe { sys::Ps2_OpenDeviceByIP(ip, &mut handle) };
+        unsafe { sys::Ps2_GetDeviceListInfo(&mut device_info, device_count) };
+
+        let ip: *const c_char = device_info.ip.as_ptr();
+        let uri = device_info.uri.as_ptr(); // model_name:serial_number
+                                            // let alias = device_info.alias; // serial number
+
+        let mut device = match Device::open_device_by_ip(ip) {
+            Ok(d) => d,
+            Err(msg) => {
+                return Err(msg);
+            }
+        };
+
+        println!(
+            "model: {}, IP: {}, firmware: {}",
+            unsafe { CStr::from_ptr(uri) }
+                .to_str()
+                .unwrap()
+                .split(":")
+                .collect::<Vec<&str>>()[0],
+            unsafe { CStr::from_ptr(ip) }.to_str().unwrap(),
+            device
+                .get_firmware_version()
+                .expect("Cannot get firmware version"),
+        );
+
+        let mut data_mode = sys::PsDataMode::default();
+        status = unsafe { sys::Ps2_GetDataMode(device.handle, SESSION_INDEX, &mut data_mode) };
         if status != OK {
-            return Err(format!("open device failed with status {}", status));
+            return Err(format!("get data mode failed with status {}", status));
         }
-        if !handle.is_null() {
-            Ok(Device {
-                handle,
-                frame_ready: sys::PsFrameReady::default(),
-                frame: sys::PsFrame::default(),
-                color_resolution: ColorResolution::Res640x480,
-                color_is_mapped: false,
-                current_frame_is_depth: false,
-                min_depth_mm: 500,  // default value
-                max_depth_mm: 1000, // default value
-            })
+
+        status = unsafe { sys::Ps2_StartStream(device.handle, SESSION_INDEX) };
+        if status != OK {
+            return Err(format!("start stream failed with status {}", status));
         } else {
-            Err("device ptr is null".to_string())
+            println!("stream started, data mode: {}", data_mode);
+        }
+
+        device.set_color_resolution(ColorResolution::Res640x480);
+
+        Ok(device)
+    }
+
+    /// Similar to `init()` but without retrieving and logging of additional info. Note: This function returns only after a device was found. Useful if the connection to the camera was interrupted and one wants to wait for a reconnection.
+    pub fn try_reconnecting() -> Result<Device, String> {
+        if let Err(msg) = initialize(true) {
+            return Err(msg);
+        };
+
+        let mut device_count = 0;
+        loop {
+            let status = unsafe { sys::Ps2_GetDeviceCount(&mut device_count) };
+            if status != OK {
+                return Err(format!("get device count failed with status {}", status));
+            } else {
+                if device_count > 0 {
+                    break;
+                }
+                sleep(Duration::from_millis(200));
+            }
+        }
+
+        let mut device_info = sys::PsDeviceInfo::default();
+        unsafe {
+            sys::Ps2_GetDeviceListInfo(&mut device_info, device_count);
+        }
+        let ip: *const c_char = device_info.ip.as_ptr();
+
+        let mut device = Device::open_device_by_ip(ip).expect("could not reopen device");
+
+        let status = unsafe { sys::Ps2_StartStream(device.handle, SESSION_INDEX) };
+        if status != OK {
+            return Err(format!("start stream failed with status {}", status));
+        }
+
+        device.set_color_resolution(ColorResolution::Res640x480);
+
+        Ok(device)
+    }
+
+    pub fn set_wait_time(&self, time: u16) {
+        unsafe {
+            sys::Ps2_SetWaitTimeOfReadNextFrame(self.handle, SESSION_INDEX, time);
         }
     }
 
@@ -259,6 +273,41 @@ impl Device {
             }
         }
     }
+
+    // private functions_______________________________________________________
+
+    fn get_firmware_version(&self) -> Result<String, String> {
+        let mut buffer = [0; 64];
+        match get_firmware_version(self.handle, &mut buffer) {
+            OK => Ok(CStr::from_bytes_until_nul(&buffer)
+                .unwrap()
+                .to_string_lossy()
+                .into_owned()),
+            error_code => Err(format!("{}", error_code)),
+        }
+    }
+
+    fn open_device_by_ip(ip: *const c_char) -> Result<Self, String> {
+        let mut handle = 0 as sys::PsDeviceHandle;
+        let status = unsafe { sys::Ps2_OpenDeviceByIP(ip, &mut handle) };
+        if status != OK {
+            return Err(format!("open device failed with status {}", status));
+        }
+        if !handle.is_null() {
+            Ok(Device {
+                handle,
+                frame_ready: sys::PsFrameReady::default(),
+                frame: sys::PsFrame::default(),
+                color_resolution: ColorResolution::Res640x480,
+                color_is_mapped: false,
+                current_frame_is_depth: false,
+                min_depth_mm: 500,  // default value
+                max_depth_mm: 1000, // default value
+            })
+        } else {
+            Err("device ptr is null".to_string())
+        }
+    }
 }
 
 /// `Data` trait to allow use of `Device` in `util::TouchDetector`.
@@ -284,4 +333,15 @@ fn get_firmware_version(handle: sys::PsDeviceHandle, buffer: &mut [u8]) -> sys::
     let len = buffer.len().try_into().unwrap();
     let ptr: *mut c_char = buffer.as_mut_ptr().cast();
     unsafe { sys::Ps2_GetFirmwareVersionNumber(handle, SESSION_INDEX, ptr, len) }
+}
+
+fn initialize(allow_reinitialization: bool) -> Result<(), String> {
+    let status = unsafe { sys::Ps2_Initialize() };
+
+    // status -101 is reinitialization
+    if !(status == OK || allow_reinitialization && status == -101) {
+        return Err(format!("initialization failed with status {}", status));
+    }
+
+    Ok(())
 }

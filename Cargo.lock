@@ -1217,9 +1217,7 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
 name = "show-image"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2d6d4263fd19c1fbd0f4bbc0e0128de55dce8beb8f7d9052e09ee7f104c9eeb"
+version = "0.14.1"
 dependencies = [
  "futures",
  "glam",
@@ -1232,9 +1230,7 @@ dependencies = [
 
 [[package]]
 name = "show-image-macros"
-version = "0.12.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61837ba1e28bb121c95460d867ff3466d368c4f029abe42aaf0fd33f00e0dea5"
+version = "0.12.4"
 dependencies = [
  "proc-macro2",
  "quote",

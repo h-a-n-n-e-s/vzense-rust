@@ -1,7 +1,7 @@
 //! Basic routines to initialize or shut down a device and to set/get parameters.
 
-use std::os::raw::c_char;
 use std::ffi::CStr;
+use std::os::raw::c_char;
 use sys::ScStatus_SC_OK as OK;
 
 use vzense_sys::scepter as sys;
@@ -61,7 +61,9 @@ impl Device {
                 "model: {}, IP: {}, firmware: {}",
                 CStr::from_ptr(model).to_str().unwrap(),
                 CStr::from_ptr(ip).to_str().unwrap(),
-                device.get_firmware_version().expect("Cannot get firmware version"),
+                device
+                    .get_firmware_version()
+                    .expect("Cannot get firmware version"),
             );
 
             let mut work_mode = sys::ScWorkMode::default();
@@ -92,7 +94,10 @@ impl Device {
     fn get_firmware_version(&self) -> Result<String, String> {
         let mut buffer = [0; 64];
         match get_firmware_version(self.handle, &mut buffer) {
-            OK => Ok(CStr::from_bytes_until_nul(&buffer).unwrap().to_string_lossy().into_owned()),
+            OK => Ok(CStr::from_bytes_until_nul(&buffer)
+                .unwrap()
+                .to_string_lossy()
+                .into_owned()),
             error_code => Err(format!("{}", error_code)),
         }
     }

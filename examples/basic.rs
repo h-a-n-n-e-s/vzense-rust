@@ -123,7 +123,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         update_window(&touch_window, &DEFAULT_RESOLUTION, &touch, Format::Mono);
 
-        // color ________________________________________________________________
+        // color ______________________________________________________________
 
         get_color_frame(&mut device, &mut color_rgb);
 
@@ -136,9 +136,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         update_window(&color_window, &color_resolution, &color_rgb, Format::Rgb);
 
-        //_____________________________________________________________________
+        // fps and frame count output__________________________________________
 
-        counter.print_fps_frame_count_info();
+        if let Some(info) = counter.fps_frame_count_info() {
+            set_window_title(&color_window, info);
+        }
 
         if stop.key_was_pressed() {
             break;
@@ -172,6 +174,10 @@ fn update_window(window: &WindowProxy, resolution: &Resolution, data: &[u8], for
     };
     let image = ImageView::new(info, data);
     window.set_image("image", image).unwrap();
+}
+
+fn set_window_title(window: &WindowProxy, title: String) {
+    window.run_function(move |w| w.set_title(title));
 }
 
 fn create_window(name: &str, size: &Resolution, allow_drag_and_zoom: bool) -> WindowProxy {

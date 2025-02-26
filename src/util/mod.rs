@@ -70,16 +70,23 @@ impl Counter {
         }
     }
 
-    pub fn print_fps_frame_count_info(&mut self) {
+    pub fn fps_frame_count_info(&mut self) -> Option<String> {
         self.count += 1;
         if self.count % self.info_interval == 0 {
             let elapsed = self.now.elapsed().as_secs_f64();
             self.now = Instant::now();
-            print!(
+            return Some(format!(
                 "  fps: {:.1}  frame: {}\r",
                 self.info_interval as f64 / elapsed,
                 self.count
-            );
+            ));
+        }
+        None
+    }
+
+    pub fn print_fps_frame_count_info(&mut self) {
+        if let Some(s) = self.fps_frame_count_info() {
+            print!("{}", s);
             std::io::stdout().flush().unwrap();
         }
     }
