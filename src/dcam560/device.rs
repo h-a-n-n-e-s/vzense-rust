@@ -24,72 +24,17 @@ impl Device {
     /// Initializes the sytem and returns a device if it finds one. Make sure a Vzense camera is connected. After 3 seconds the routine will time out if no device was found.
     pub fn init() -> Result<Self, String> {
         println!("initializing...");
-        if let Err(msg) = initialize(false) {
-            return Err(msg);
-        };
+        initialize(false)?;
 
-        let mut device_count = 0;
-        let mut times_tried = 0;
-        let mut status;
-        println!("searching for device...");
-        loop {
-            status = unsafe { sys::Ps2_GetDeviceCount(&mut device_count) };
-            if status != OK {
-                return Err(format!("get device count failed with status {}", status));
-            } else {
-                if device_count > 0 {
-                    print!("device found, ");
-                    break;
-                }
-                times_tried += 1;
-                // give up after 3 seconds
-                if times_tried == 15 {
-                    return Err("no device found".to_string());
-                }
-                sleep(Duration::from_millis(200));
-            }
-        }
+        let device_count = get_device_count(true, 15)?;
 
-        let mut device_info = sys::PsDeviceInfo::default();
+        let mut device = Device::open_device_by_ip(get_ip(device_count)?)?;
 
-        unsafe { sys::Ps2_GetDeviceListInfo(&mut device_info, device_count) };
+        let info = device.get_device_info(device_count)?;
+        println!("model: {}, IP: {}, firmware: {}", info[0], info[1], info[2]);
 
-        let ip: *const c_char = device_info.ip.as_ptr();
-        let uri = device_info.uri.as_ptr(); // model_name:serial_number
-                                            // let alias = device_info.alias; // serial number
-
-        let mut device = match Device::open_device_by_ip(ip) {
-            Ok(d) => d,
-            Err(msg) => {
-                return Err(msg);
-            }
-        };
-
-        println!(
-            "model: {}, IP: {}, firmware: {}",
-            unsafe { CStr::from_ptr(uri) }
-                .to_str()
-                .unwrap()
-                .split(":")
-                .collect::<Vec<&str>>()[0],
-            unsafe { CStr::from_ptr(ip) }.to_str().unwrap(),
-            device
-                .get_firmware_version()
-                .expect("Cannot get firmware version"),
-        );
-
-        let mut data_mode = sys::PsDataMode::default();
-        status = unsafe { sys::Ps2_GetDataMode(device.handle, SESSION_INDEX, &mut data_mode) };
-        if status != OK {
-            return Err(format!("get data mode failed with status {}", status));
-        }
-
-        status = unsafe { sys::Ps2_StartStream(device.handle, SESSION_INDEX) };
-        if status != OK {
-            return Err(format!("start stream failed with status {}", status));
-        } else {
-            println!("stream started, data mode: {}", data_mode);
-        }
+        device.start_stream()?;
+        println!("stream started");
 
         device.set_color_resolution(ColorResolution::Res640x480);
 
@@ -97,42 +42,23 @@ impl Device {
     }
 
     /// Similar to `init()` but without retrieving and logging of additional info. Note: This function returns only after a device was found. Useful if the connection to the camera was interrupted and one wants to wait for a reconnection.
-    pub fn try_reconnecting() -> Result<Device, String> {
-        if let Err(msg) = initialize(true) {
-            return Err(msg);
-        };
+    pub fn try_reconnecting() -> Result<Self, String> {
+        // allowing reinitialization
+        initialize(true)?;
 
-        let mut device_count = 0;
-        loop {
-            let status = unsafe { sys::Ps2_GetDeviceCount(&mut device_count) };
-            if status != OK {
-                return Err(format!("get device count failed with status {}", status));
-            } else {
-                if device_count > 0 {
-                    break;
-                }
-                sleep(Duration::from_millis(200));
-            }
-        }
+        // trying until a device has been found
+        let device_count = get_device_count(false, 0)?;
 
-        let mut device_info = sys::PsDeviceInfo::default();
-        unsafe {
-            sys::Ps2_GetDeviceListInfo(&mut device_info, device_count);
-        }
-        let ip: *const c_char = device_info.ip.as_ptr();
+        let mut device = Device::open_device_by_ip(get_ip(device_count)?)?;
 
-        let mut device = Device::open_device_by_ip(ip).expect("could not reopen device");
-
-        let status = unsafe { sys::Ps2_StartStream(device.handle, SESSION_INDEX) };
-        if status != OK {
-            return Err(format!("start stream failed with status {}", status));
-        }
+        device.start_stream()?;
 
         device.set_color_resolution(ColorResolution::Res640x480);
 
         Ok(device)
     }
 
+    /// Set the wait time for the call to `read_next_frame` in ms.
     pub fn set_wait_time(&self, time: u16) {
         unsafe {
             sys::Ps2_SetWaitTimeOfReadNextFrame(self.handle, SESSION_INDEX, time);
@@ -155,7 +81,10 @@ impl Device {
         let w = self.frame.width as usize;
         let h = self.frame.height as usize;
         if w * h != pixel_count {
-            println!("!!! pixel count is not equal to {} * {}", w, h)
+            println!(
+                "\x1b[31m!!! pixel count is not equal to {} * {}\x1b[0m",
+                w, h
+            )
         }
     }
 
@@ -197,7 +126,7 @@ impl Device {
     pub fn set_color_resolution(&mut self, resolution: ColorResolution) -> Resolution {
         if self.color_is_mapped {
             println!(
-                "setting of color resolution is ignored because color frame is mapped to depth"
+                "\x1b[33msetting of color resolution is ignored because color frame is mapped to depth\x1b[0m"
             );
         } else {
             let res = match resolution {
@@ -223,7 +152,7 @@ impl Device {
             2 => Resolution::new(640, 480),
             5 => Resolution::new(800, 600),
             4 => Resolution::new(1600, 1200),
-            _ => panic!("unknown rgb resolution"),
+            _ => panic!("\x1b[31munknown rgb resolution\x1b[0m"),
         }
     }
 
@@ -241,22 +170,37 @@ impl Device {
 
     /// Returns the current depth measuring range `(min, max)` of the camera in mm.
     pub fn get_depth_measuring_range(&self) -> (u16, u16) {
+        let mut depth_range = sys::PsDepthRange::default();
+
         unsafe {
-            let mut depth_range = sys::PsDepthRange::default();
-
             sys::Ps2_GetDepthRange(self.handle, SESSION_INDEX, &mut depth_range);
-
-            let mut mr = sys::PsMeasuringRange::default();
-
-            sys::Ps2_GetMeasuringRange(self.handle, SESSION_INDEX, depth_range, &mut mr);
-
-            match depth_range {
-                0 => (mr.effectDepthMinNear, mr.effectDepthMaxNear),
-                1 => (mr.effectDepthMinMid, mr.effectDepthMaxMid),
-                2 => (mr.effectDepthMinFar, mr.effectDepthMaxFar),
-                _ => panic!("unknown measuring range"),
-            }
         }
+
+        let mut mr = sys::PsMeasuringRange::default();
+
+        unsafe {
+            sys::Ps2_GetMeasuringRange(self.handle, SESSION_INDEX, depth_range, &mut mr);
+        }
+
+        match depth_range {
+            0 => (mr.effectDepthMinNear, mr.effectDepthMaxNear),
+            1 => (mr.effectDepthMinMid, mr.effectDepthMaxMid),
+            2 => (mr.effectDepthMinFar, mr.effectDepthMaxFar),
+            _ => panic!("\x1b[31munknown measuring range\x1b[0m"),
+        }
+    }
+
+    /// Current data mode.
+    pub fn get_data_mode(&self) -> Result<u32, String> {
+        let mut data_mode = sys::PsDataMode::default();
+        let status = unsafe { sys::Ps2_GetDataMode(self.handle, SESSION_INDEX, &mut data_mode) };
+        if status != OK {
+            return Err(format!(
+                "\x1b[31mget data mode failed with status {}\x1b[0m",
+                status
+            ));
+        }
+        Ok(data_mode)
     }
 
     /// Stops the stream, closes the device, and clears all resources.
@@ -267,11 +211,44 @@ impl Device {
 
             let status = sys::Ps2_Shutdown();
             if status != OK {
-                println!("shut down failed with status: {}", status);
+                println!("\x1b[31mshut down failed with status: {}\x1b[0m", status);
             } else {
                 println!("shut down device successfully");
             }
         }
+    }
+
+    /// Returns an array of Strings: \[model, IP, firmware, serial number\]
+    pub fn get_device_info(&self, device_count: u32) -> Result<[String; 4], String> {
+        if device_count == 0 {
+            return Err(format!("\x1b[31mno device to get info for\x1b[0m"));
+        }
+
+        let mut device_info = sys::PsDeviceInfo::default();
+
+        unsafe { sys::Ps2_GetDeviceListInfo(&mut device_info, device_count) };
+
+        let ip: *const c_char = device_info.ip.as_ptr();
+        let uri = device_info.uri.as_ptr(); // model_name:serial_number
+        let serial = device_info.alias.as_ptr(); // serial number
+
+        let firmware = self
+            .get_firmware_version()
+            .expect("\x1b[31mCannot get firmware version\x1b[0m");
+
+        Ok([
+            unsafe { CStr::from_ptr(uri) }
+                .to_str()
+                .unwrap()
+                .split(":")
+                .collect::<Vec<&str>>()[0]
+                .to_string(),
+            unsafe { CStr::from_ptr(ip) }.to_string_lossy().into_owned(),
+            firmware,
+            unsafe { CStr::from_ptr(serial) }
+                .to_string_lossy()
+                .into_owned(),
+        ])
     }
 
     // private functions_______________________________________________________
@@ -291,7 +268,10 @@ impl Device {
         let mut handle = 0 as sys::PsDeviceHandle;
         let status = unsafe { sys::Ps2_OpenDeviceByIP(ip, &mut handle) };
         if status != OK {
-            return Err(format!("open device failed with status {}", status));
+            return Err(format!(
+                "\x1b[31mopen device failed with status {}\x1b[0m",
+                status
+            ));
         }
         if !handle.is_null() {
             Ok(Device {
@@ -305,8 +285,19 @@ impl Device {
                 max_depth_mm: 1000, // default value
             })
         } else {
-            Err("device ptr is null".to_string())
+            Err("\x1b[31mdevice ptr is null\x1b[0m".to_string())
         }
+    }
+
+    fn start_stream(&self) -> Result<(), String> {
+        let status = unsafe { sys::Ps2_StartStream(self.handle, SESSION_INDEX) };
+        if status != OK {
+            return Err(format!(
+                "\x1b[31mstart stream failed with status {}\x1b[0m",
+                status
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -340,8 +331,60 @@ fn initialize(allow_reinitialization: bool) -> Result<(), String> {
 
     // status -101 is reinitialization
     if !(status == OK || allow_reinitialization && status == -101) {
-        return Err(format!("initialization failed with status {}", status));
+        return Err(format!(
+            "\x1b[31minitialization failed with status {}\x1b[0m",
+            status
+        ));
     }
 
     Ok(())
+}
+
+/// Tries to find devices every 200 ms `try_count` times. If `try_count` is zero it tries until a device has been found.
+fn get_device_count(verbose: bool, try_count: u32) -> Result<u32, String> {
+    let mut device_count = 0;
+    let mut times_tried = 0;
+    let mut status;
+    if verbose {
+        println!("searching for device...");
+    }
+    loop {
+        status = unsafe { sys::Ps2_GetDeviceCount(&mut device_count) };
+
+        if status != OK {
+            return Err(format!(
+                "\x1b[31mget device count failed with status {}\x1b[0m",
+                status
+            ));
+        } else {
+            if device_count > 0 {
+                if verbose {
+                    print!("device found, ");
+                }
+                break;
+            }
+            if try_count > 0 {
+                times_tried += 1;
+                if times_tried == try_count {
+                    return Err("\x1b[31mno device found\x1b[0m".to_string());
+                }
+            }
+            sleep(Duration::from_millis(200));
+        }
+    }
+    Ok(device_count)
+}
+
+fn get_ip(device_count: u32) -> Result<*const c_char, String> {
+    let mut device_info = sys::PsDeviceInfo::default();
+    unsafe {
+        let status = sys::Ps2_GetDeviceListInfo(&mut device_info, device_count);
+        if status != OK {
+            return Err(format!(
+                "\x1b[31mget device list info failed with status {}\x1b[0m",
+                status
+            ));
+        }
+    }
+    Ok(device_info.ip.as_ptr())
 }

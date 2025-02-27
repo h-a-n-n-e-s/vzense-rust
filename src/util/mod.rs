@@ -6,8 +6,8 @@ pub mod touch_detector;
 use std::{
     io::Write,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
     thread::JoinHandle,
     time::Instant,

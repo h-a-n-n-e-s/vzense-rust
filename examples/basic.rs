@@ -16,10 +16,10 @@ use camera_api::{
 };
 
 use vzense_rust::{
+    ColorFormat, ColorResolution, DEFAULT_PIXEL_COUNT, DEFAULT_RESOLUTION, Resolution,
     util::{
-        color_map::TURBO, new_fixed_vec, touch_detector::TouchDetector, Counter, KeyboardEvent,
+        Counter, KeyboardEvent, color_map::TURBO, new_fixed_vec, touch_detector::TouchDetector,
     },
-    ColorFormat, ColorResolution, Resolution, DEFAULT_PIXEL_COUNT, DEFAULT_RESOLUTION,
 };
 
 #[show_image::main]

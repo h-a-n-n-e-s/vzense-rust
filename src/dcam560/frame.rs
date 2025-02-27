@@ -14,7 +14,10 @@ pub fn read_next_frame(device: &mut Device) -> i32 {
     unsafe {
         let status = sys::Ps2_ReadNextFrame(device.handle, SESSION_INDEX, &mut device.frame_ready);
         if status != OK {
-            println!("vzense_rust: read_next_frame failed with status {}", status);
+            println!(
+                "\x1b[31mvzense_rust: read_next_frame failed with status {}\x1b[0m",
+                status
+            );
             return status;
         }
     }
@@ -143,9 +146,9 @@ fn get_color(device: &Device, color: &mut [u8]) {
 
 fn check_frame(device: &Device, status: sys::PsReturnStatus) {
     if status != OK {
-        panic!("get_frame failed with status {}", status);
+        panic!("\x1b[31mget_frame failed with status {}\x1b[0m", status);
     }
     if device.frame.pFrameData.is_null() {
-        panic!("frame pointer is NULL!");
+        panic!("\x1b[31mframe pointer is NULL!\x1b[0m");
     }
 }
