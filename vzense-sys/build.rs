@@ -8,8 +8,8 @@ fn main() {
         for i in 0..2 {
             let bindings = bindgen::Builder::default()
                 // The input header we would like to generate bindings for.
-                //.header("include/Vzense_api_560.h")
                 .header(headers[i])
+                // necessary for 2024 edition
                 .wrap_unsafe_ops(true)
                 // derive defaults if possible
                 .derive_default(true)
