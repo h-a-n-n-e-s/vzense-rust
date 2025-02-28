@@ -2,6 +2,8 @@
 This example covers all the functionality provided by the library. It connects to a device, starts a stream, and displays the received data. The `touch_detector` is a very simple example of image processing, using depth data to detect touch events.
 */
 
+use std::time::Duration;
+
 // By default using the newest Scepter API.
 #[cfg(not(feature = "dcam560"))]
 use vzense_rust::scepter as camera_api;
@@ -26,7 +28,7 @@ use vzense_rust::{
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     //
     // Looking for a device. If a device has been found, it will be opened and a stream started.
-    let mut device = match Device::init() {
+    let mut device = match Device::initialize(Duration::from_secs(3), true) {
         Ok(d) => d,
         Err(msg) => {
             println!("{}", msg);
@@ -149,7 +151,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     stop.join();
 
-    device.shut_down();
+    device.shut_down(true);
 
     Ok(())
 }

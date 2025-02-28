@@ -10,6 +10,7 @@ fn main() {
                 // The input header we would like to generate bindings for.
                 //.header("include/Vzense_api_560.h")
                 .header(headers[i])
+                .wrap_unsafe_ops(true)
                 // derive defaults if possible
                 .derive_default(true)
                 // Tell cargo to invalidate the built crate whenever any of the

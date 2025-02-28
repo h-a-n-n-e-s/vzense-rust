@@ -20,10 +20,10 @@ show-image = {path = "../show-image-rs"}
 dcam560 = []
 docsrs = []
 # uses the older API specifically for the DCAM560 model
-# default = ["dcam560"]
+default = ["dcam560"]
 
 # recreates the bindings for vzense-sys
-# run-bindgen = ["vzense-sys/run-bindgen"]
+run-bindgen = ["vzense-sys/run-bindgen"]
 
 # prevent running build.rs for docs.rs
 [package.metadata.docs.rs]

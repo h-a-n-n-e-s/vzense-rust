@@ -21,48 +21,27 @@ pub struct Device {
     pub(super) max_depth_mm: u16,
 }
 impl Device {
-    /// Initializes the sytem and returns a device if it finds one. Make sure a Vzense camera is connected. After 3 seconds the routine will time out if no device was found.
-    pub fn init() -> Result<Self, String> {
-        println!("initializing...");
-        initialize(false)?;
+    /// Initializes the sytem and returns a device if it finds one. Make sure a Vzense camera is connected. `scan_time` should be at least one second to find a device. Set `scan_time = Duration::MAX` to scan until a device was found (useful to wait for reconnection after the connection to a device was interrupted).
+    pub fn initialize(scan_time: Duration, verbose: bool) -> Result<Self, String> {
+        initialize(verbose)?;
 
-        let device_count = get_device_count(true, 15)?;
-
-        let mut device = Device::open_device_by_ip(get_ip(device_count)?)?;
-
-        let info = device.get_device_info(device_count)?;
-        println!("model: {}, IP: {}, firmware: {}", info[0], info[1], info[2]);
-
-        device.start_stream()?;
-        println!("stream started");
-
-        device.set_color_resolution(ColorResolution::Res640x480);
-
-        Ok(device)
-    }
-
-    /// Similar to `init()` but without retrieving and logging of additional info. Note: This function returns only after a device was found. Useful if the connection to the camera was interrupted and one wants to wait for a reconnection.
-    pub fn try_reconnecting() -> Result<Self, String> {
-        // allowing reinitialization
-        initialize(true)?;
-
-        // trying until a device has been found
-        let device_count = get_device_count(false, 0)?;
+        let device_count = get_device_count(scan_time, verbose)?;
 
         let mut device = Device::open_device_by_ip(get_ip(device_count)?)?;
 
-        device.start_stream()?;
-
-        device.set_color_resolution(ColorResolution::Res640x480);
-
-        Ok(device)
-    }
-
-    /// Set the wait time for the call to `read_next_frame` in ms.
-    pub fn set_wait_time(&self, time: u16) {
-        unsafe {
-            sys::Ps2_SetWaitTimeOfReadNextFrame(self.handle, SESSION_INDEX, time);
+        if verbose {
+            let info = device.get_device_info(device_count)?;
+            println!(
+                "\x1b[36mmodel: {}, IP: {}, firmware: {}\x1b[0m",
+                info[0], info[1], info[2]
+            );
         }
+
+        device.start_stream(verbose)?;
+
+        device.set_color_resolution(ColorResolution::Res640x480);
+
+        Ok(device)
     }
 
     /// Choosing the min/max depth in mm for the color mapping of the depth output. These values also bound the depths used in the `util::TochDetector` to reduce measuring artifacts.
@@ -190,6 +169,13 @@ impl Device {
         }
     }
 
+    /// Set the wait time for the call to `read_next_frame` in ms.
+    pub fn set_wait_time(&self, time: u16) {
+        unsafe {
+            sys::Ps2_SetWaitTimeOfReadNextFrame(self.handle, SESSION_INDEX, time);
+        }
+    }
+
     /// Current data mode.
     pub fn get_data_mode(&self) -> Result<u32, String> {
         let mut data_mode = sys::PsDataMode::default();
@@ -204,7 +190,7 @@ impl Device {
     }
 
     /// Stops the stream, closes the device, and clears all resources.
-    pub fn shut_down(&mut self) {
+    pub fn shut_down(&mut self, verbose: bool) {
         unsafe {
             sys::Ps2_StopStream(self.handle, SESSION_INDEX);
             sys::Ps2_CloseDevice(&mut self.handle);
@@ -212,23 +198,23 @@ impl Device {
             let status = sys::Ps2_Shutdown();
             if status != OK {
                 println!("\x1b[31mshut down failed with status: {}\x1b[0m", status);
-            } else {
+            } else if verbose {
                 println!("shut down device successfully");
             }
         }
     }
 
-    /// Returns an array of Strings: \[model, IP, firmware, serial number\]
+    /// Returns device info as an array of Strings: \[model, IP, firmware, serial number\]
     pub fn get_device_info(&self, device_count: u32) -> Result<[String; 4], String> {
         if device_count == 0 {
-            return Err(format!("\x1b[31mno device to get info for\x1b[0m"));
+            return Err("\x1b[31mno device to get info for\x1b[0m".to_string());
         }
 
         let mut device_info = sys::PsDeviceInfo::default();
 
         unsafe { sys::Ps2_GetDeviceListInfo(&mut device_info, device_count) };
 
-        let ip: *const c_char = device_info.ip.as_ptr();
+        let ip = device_info.ip.as_ptr();
         let uri = device_info.uri.as_ptr(); // model_name:serial_number
         let serial = device_info.alias.as_ptr(); // serial number
 
@@ -289,7 +275,7 @@ impl Device {
         }
     }
 
-    fn start_stream(&self) -> Result<(), String> {
+    fn start_stream(&self, verbose: bool) -> Result<(), String> {
         let status = unsafe { sys::Ps2_StartStream(self.handle, SESSION_INDEX) };
         if status != OK {
             return Err(format!(
@@ -297,7 +283,15 @@ impl Device {
                 status
             ));
         }
+        if verbose {
+            println!("stream started")
+        }
         Ok(())
+    }
+
+    #[deprecated(since = "0.3.0", note = "Use initialize(scan_time, verbose) instead.")]
+    pub fn init() -> Result<Self, String> {
+        Err("Deprecated, use initialize(scan_time, verbose) instead".to_string())
     }
 }
 
@@ -326,22 +320,36 @@ fn get_firmware_version(handle: sys::PsDeviceHandle, buffer: &mut [u8]) -> sys::
     unsafe { sys::Ps2_GetFirmwareVersionNumber(handle, SESSION_INDEX, ptr, len) }
 }
 
-fn initialize(allow_reinitialization: bool) -> Result<(), String> {
+fn initialize(verbose: bool) -> Result<(), String> {
+    if verbose {
+        println!("initializing...");
+    }
     let status = unsafe { sys::Ps2_Initialize() };
 
     // status -101 is reinitialization
-    if !(status == OK || allow_reinitialization && status == -101) {
+    if status == -101 {
+        if verbose {
+            println!("reinitializing...");
+        }
+    } else if status != OK {
         return Err(format!(
             "\x1b[31minitialization failed with status {}\x1b[0m",
             status
         ));
     }
-
     Ok(())
 }
 
-/// Tries to find devices every 200 ms `try_count` times. If `try_count` is zero it tries until a device has been found.
-fn get_device_count(verbose: bool, try_count: u32) -> Result<u32, String> {
+/// Tries to find devices every 200 ms for duration `scan_time`.
+fn get_device_count(scan_time: Duration, verbose: bool) -> Result<u32, String> {
+    if scan_time < Duration::from_secs(1) {
+        println!(
+            "\x1b[33mvzense-rust warning: scan time might be too short to detect a device\x1b[0m"
+        );
+    }
+    let sleep_interval = Duration::from_millis(200);
+    let try_count = scan_time.div_duration_f64(sleep_interval).ceil() as u64;
+
     let mut device_count = 0;
     let mut times_tried = 0;
     let mut status;
@@ -359,17 +367,15 @@ fn get_device_count(verbose: bool, try_count: u32) -> Result<u32, String> {
         } else {
             if device_count > 0 {
                 if verbose {
-                    print!("device found, ");
+                    println!("\x1b[36mdevice found, \x1b[0m");
                 }
                 break;
             }
-            if try_count > 0 {
-                times_tried += 1;
-                if times_tried == try_count {
-                    return Err("\x1b[31mno device found\x1b[0m".to_string());
-                }
+            times_tried += 1;
+            if times_tried >= try_count {
+                return Err("\x1b[31mno device found\x1b[0m".to_string());
             }
-            sleep(Duration::from_millis(200));
+            sleep(sleep_interval);
         }
     }
     Ok(device_count)

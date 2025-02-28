@@ -13,7 +13,7 @@ pub fn read_next_frame(device: &mut Device, max_wait_time_ms: u16) -> i32 {
         let status = sys::scGetFrameReady(device.handle, max_wait_time_ms, &mut device.frame_ready);
         if status != OK {
             println!(
-                "vzense_rust: read_next_frame failed with status {}",
+                "\x1b[31mvzense_rust: read_next_frame failed with status {}\x1b[0m",
                 get_message(status)
             );
             return status;
