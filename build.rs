@@ -38,19 +38,22 @@ fn main() {
         if !existing(lib_path.clone()) {
             fs::create_dir_all(lib_path.clone()).unwrap();
 
-            download(
-                &lib_url,
-                lib_path.join(format!("{}{}", arch, ".tar.xz"))
-            )
-            .expect("\x1b[31mError vzense-rust: Unable to download libraries.\x1b[0m");
+            download(&lib_url, lib_path.join(format!("{}{}", arch, ".tar.xz")))
+                .expect("\x1b[31mError vzense-rust: Unable to download libraries.\x1b[0m");
 
             // decompress
-            execute(
-                "unxz",
-                &[&format!("{arch}.tar.xz")],
-                lib_path.clone(),
-                "could not unxz vzense-lib",
-            );
+            // execute(
+            //     "unxz",
+            //     &[&format!("{arch}.tar.xz")],
+            //     lib_path.clone(),
+            //     "could not unxz vzense-lib",
+            // );
+
+            std::process::Command::new("unxz")
+                .current_dir(lib_path.clone())
+                .arg("x86_64.tar.xz")
+                .output()
+                .expect("could not unxz vzense-lib");
 
             // untar
             execute(
