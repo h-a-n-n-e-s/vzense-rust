@@ -21,7 +21,7 @@ fn main() {
                 .expect("Unable to generate bindings");
 
             let bindings_dir = std::env::current_dir().unwrap().join("bindings");
-            let bindings_file = bindings_dir.join(binding_file_names[i]); // "bindings.rs");
+            let bindings_file = bindings_dir.join(binding_file_names[i]);
             bindings
                 .write_to_file(bindings_file)
                 .expect("Couldn't write bindings!");

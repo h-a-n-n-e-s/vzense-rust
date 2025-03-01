@@ -1,10 +1,29 @@
-use std::path::Path;
-use std::{fs, io};
+use reqwest::blocking::get;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::time::Instant;
+use std::{error, fs, io};
 
 fn main() {
     // prevent running for docs.rs
     #[cfg(not(feature = "docsrs"))]
     {
+        #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+        {
+            panic!(
+                "\x1b[31mError vzense-rust: Sorry, no libraries for this architecture. Libraries are only provided for x86_64 and aarch64.\x1b[0m"
+            )
+        }
+        #[cfg(target_arch = "x86_64")]
+        let arch = "x86_64";
+        #[cfg(target_arch = "aarch64")]
+        let arch = "aarch64";
+
+        let lib_url =
+            format!("https://github.com/h-a-n-n-e-s/vzense-rust/blob/main/lib/{arch}.tar.xz");
+
+        // download(lib_url, "bernd.tar.xz").expect("cannot download file");
+
         /*
         Shared libraries need to be within the target dir, see
         https://doc.rust-lang.org/cargo/reference/environment-variables.html#dynamic-library-paths
@@ -12,57 +31,40 @@ fn main() {
         Therefore, libraries are first extracted from `vzense-lib.tar.xz` to `targst/vzense_lib/` and then symlinked from there to target/<buildType>/deps/.
         */
 
-        let lib_src = std::env::current_dir().unwrap().join("target/vzense-lib");
+        let root = std::env::current_dir().unwrap();
+        let lib_path = root.join("target/vzense-lib").join(arch);
 
         // check if libraries have been extracted already
-        if !lib_src.exists() {
-            let base_path = std::env::current_dir().unwrap();
-            let target_path = base_path.join("target");
+        if !existing(lib_path.clone()) {
+            fs::create_dir_all(lib_path.clone()).unwrap();
 
-            if !target_path.exists() {
-                fs::create_dir(target_path.clone()).unwrap();
-            }
-
-            std::fs::copy(
-                base_path.join("vzense-lib.tar.xz"),
-                target_path.join("vzense-lib.tar.xz"),
+            download(
+                &lib_url,
+                lib_path.join(format!("{}{}", arch, ".tar.xz"))
             )
-            .expect(&format!(
-                "could not copy vzense-lib {:?}",
-                base_path.join("vzense-lib.tar.xz")
-            ));
+            .expect("\x1b[31mError vzense-rust: Unable to download libraries.\x1b[0m");
 
-            // decompress the vzense-lib directory
-            std::process::Command::new("unxz")
-                .current_dir(target_path.clone())
-                .arg("vzense-lib.tar.xz")
-                .output()
-                .expect("could not unxz vzense-lib");
+            // decompress
+            execute(
+                "unxz",
+                &[&format!("{arch}.tar.xz")],
+                lib_path.clone(),
+                "could not unxz vzense-lib",
+            );
 
             // untar
-            std::process::Command::new("tar")
-                .current_dir(target_path.clone())
-                .arg("-xf")
-                .arg("vzense-lib.tar")
-                .output()
-                .expect("could not untar vzense-lib");
-
-            // rm tar
-            // std::process::Command::new("rm")
-            //     .current_dir(target_path)
-            //     .arg("vzense-lib.tar")
-            //     .output()
-            //     .unwrap();
+            execute(
+                "tar",
+                &["-xf", &format!("{arch}.tar")],
+                lib_path.clone(),
+                "could not untar vzense-lib",
+            );
         }
 
-        let mut deps_path = std::env::current_exe().unwrap();
-        for _ in 0..3 {
-            deps_path.pop(); // 3 x cd ..
-        }
-        deps_path.push("deps"); // cd deps
+        let deps_path = std::env::current_exe().unwrap().join("../../../deps");
 
         // create symlinks
-        symlink_dir_all(lib_src, deps_path.clone())
+        symlink_dir_all(lib_path, deps_path.clone())
             .expect("failed to create symlinks to libraries");
 
         // tell cargo to look for shared libraries in the specified directory
@@ -78,23 +80,50 @@ fn main() {
         println!("cargo:rustc-link-lib=vzense_api");
         println!("cargo:rustc-link-lib=Scepter_api");
     }
+}
 
-    /// create symlinks recursively to whole directory
-    fn symlink_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> {
-        fs::create_dir_all(&dst)?;
-        for entry in fs::read_dir(src)? {
-            let entry = entry?;
-            let file = dst.as_ref().join(entry.file_name());
-            let ty = entry.file_type()?;
-            if ty.is_dir() {
-                symlink_dir_all(entry.path(), file)?;
-            } else {
-                // fs::copy(entry.path(), file)?;
-                if !file.exists() {
-                    std::os::unix::fs::symlink(entry.path(), file)?;
-                }
+fn existing(path: PathBuf) -> bool {
+    path.try_exists()
+        .expect(&format!("cannot check if {path:?} exists"))
+}
+
+fn execute(command: &str, args: &[&str], dir: PathBuf, err: &str) {
+    std::process::Command::new(command)
+        .current_dir(dir)
+        .args(args)
+        .output()
+        .expect(err);
+}
+
+/// create symlinks recursively to whole directory
+fn symlink_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> {
+    fs::create_dir_all(&dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let file = dst.as_ref().join(entry.file_name());
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            symlink_dir_all(entry.path(), file)?;
+        } else {
+            // fs::copy(entry.path(), file)?;
+            if !file.exists() {
+                std::os::unix::fs::symlink(entry.path(), file)?;
             }
         }
-        Ok(())
     }
+    Ok(())
+}
+
+/// download from `url` and save as `file_name`
+fn download(url: &str, file_name: PathBuf) -> Result<(), Box<dyn error::Error>> {
+    let now = Instant::now();
+    let response = get(url)?;
+    let content = response.bytes()?;
+
+    let mut downloaded_file = std::fs::File::create(file_name)?;
+    downloaded_file.write_all(&content)?;
+
+    let duration = now.elapsed();
+    println!("Downloaded file {url} in {duration:?}");
+    Ok(())
 }

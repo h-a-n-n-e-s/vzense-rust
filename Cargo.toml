@@ -5,16 +5,20 @@ edition = "2024"
 description = "High-level library for Vzense cameras"
 categories = ["external-ffi-bindings", "computer-vision", "hardware-support"]
 repository = "https://github.com/h-a-n-n-e-s/vzense-rust"
+exclude = ["/vzense-lib"]
 readme = "README.md"
 license = "MIT AND BSD-3-Clause"
 authors = ["Johannes Schoenke"]
 
 [dependencies]
-vzense-sys = { path = "vzense-sys", version = "0.2.0"}
+vzense-sys = { path = "vzense-sys" }
 
 [dev-dependencies]
-# show-image = "0.14.1"
-show-image = {path = "../show-image-rs"}
+show-image = "0.14.1"
+# show-image = {path = "../show-image-rs"}
+
+[build-dependencies]
+reqwest = { version = "0.12.12", features = ["blocking"]}
 
 [features]
 dcam560 = []
