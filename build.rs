@@ -2,7 +2,7 @@ use reqwest::blocking::get;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
-use std::{error, fs, io};
+use std::{env, error, fs, io};
 
 fn main() {
     // prevent running for docs.rs
@@ -19,41 +19,34 @@ fn main() {
         #[cfg(target_arch = "aarch64")]
         let arch = "aarch64";
 
-        let lib_url =
-            format!("https://github.com/h-a-n-n-e-s/vzense-rust/blob/main/lib/{arch}.tar.xz");
-
-        // download(lib_url, "bernd.tar.xz").expect("cannot download file");
-
         /*
         Shared libraries need to be within the target dir, see
         https://doc.rust-lang.org/cargo/reference/environment-variables.html#dynamic-library-paths
 
-        Therefore, libraries are first extracted from `vzense-lib.tar.xz` to `targst/vzense_lib/` and then symlinked from there to target/<buildType>/deps/.
+        Therefore, the library archive {arch}.tar.xz is first downloaded from github and then extracted in <vzense-rustPackageDir>/target/vzense_lib/. Finally, symlinks to the libraries are added to <whateverProjectDir>/target/<buildType>/deps/.
         */
 
-        let root = std::env::current_dir().unwrap();
-        let lib_path = root.join("target/vzense-lib").join(arch);
+        // <vzense-rustPackageDir>/target/vzense_lib/
+        let lib_path = env::current_dir().unwrap().join("target/vzense-lib");
 
         // check if libraries have been extracted already
-        if !existing(lib_path.clone()) {
+        if !existing(lib_path.join(arch)) {
             fs::create_dir_all(lib_path.clone()).unwrap();
+
+            let lib_url = format!(
+                "https://github.com/h-a-n-n-e-s/vzense-rust/raw/refs/heads/main/lib/{arch}.tar.xz"
+            );
 
             download(&lib_url, lib_path.join(format!("{}{}", arch, ".tar.xz")))
                 .expect("\x1b[31mError vzense-rust: Unable to download libraries.\x1b[0m");
 
             // decompress
-            // execute(
-            //     "unxz",
-            //     &[&format!("{arch}.tar.xz")],
-            //     lib_path.clone(),
-            //     "could not unxz vzense-lib",
-            // );
-
-            std::process::Command::new("unxz")
-                .current_dir(lib_path.clone())
-                .arg("x86_64.tar.xz")
-                .output()
-                .expect("could not unxz vzense-lib");
+            execute(
+                "unxz",
+                &[&format!("{arch}.tar.xz")],
+                lib_path.clone(),
+                "could not unxz vzense-lib",
+            );
 
             // untar
             execute(
@@ -64,11 +57,13 @@ fn main() {
             );
         }
 
-        let deps_path = std::env::current_exe().unwrap().join("../../../deps");
+        // <whateverProjectDir>/target/<buildType>/deps/
+        let deps_path = Path::new(&env::var("OUT_DIR").unwrap()).join("../../../deps");
 
         // create symlinks
-        symlink_dir_all(lib_path, deps_path.clone())
-            .expect("failed to create symlinks to libraries");
+        symlink_dir_all(lib_path.join(arch), deps_path.clone()).expect(&format!(
+            "\x1b[31mfailed to create symlinks to libraries\x1b[0m"
+        ));
 
         // tell cargo to look for shared libraries in the specified directory
         println!("cargo:rustc-link-search={}", deps_path.to_str().unwrap());
@@ -108,8 +103,7 @@ fn symlink_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<(
         if ty.is_dir() {
             symlink_dir_all(entry.path(), file)?;
         } else {
-            // fs::copy(entry.path(), file)?;
-            if !file.exists() {
+            if !existing(file.clone()) {
                 std::os::unix::fs::symlink(entry.path(), file)?;
             }
         }
@@ -123,7 +117,7 @@ fn download(url: &str, file_name: PathBuf) -> Result<(), Box<dyn error::Error>> 
     let response = get(url)?;
     let content = response.bytes()?;
 
-    let mut downloaded_file = std::fs::File::create(file_name)?;
+    let mut downloaded_file = fs::File::create(file_name)?;
     downloaded_file.write_all(&content)?;
 
     let duration = now.elapsed();
