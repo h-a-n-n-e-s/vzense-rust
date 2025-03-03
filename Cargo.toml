@@ -1,6 +1,6 @@
 [package]
 name = "vzense-rust"
-version = "0.2.8"
+version = "0.3.0"
 edition = "2024"
 description = "High-level library for Vzense cameras"
 categories = ["external-ffi-bindings", "computer-vision", "hardware-support"]
@@ -10,31 +10,24 @@ readme = "README.md"
 license = "MIT AND BSD-3-Clause"
 authors = ["Johannes Schoenke"]
 
+# to prevent running build.rs for docs.rs
+[package.metadata.docs.rs]
+features = ["docsrs"]
+
 [dependencies]
 vzense-sys = { path = "vzense-sys" }
 
 [dev-dependencies]
 show-image = "0.14.1"
-# show-image = {path = "../show-image-rs"}
 
 [build-dependencies]
-reqwest = { version = "0.12.12", features = ["blocking"]}
+# minimal support for https requests
+reqwest = { version = "0.12.12", default-features = false, features = ["rustls-tls", "blocking"] }
 
 [features]
+# recreates the bindings for vzense-sys
+run-bindgen = ["vzense-sys/run-bindgen"]
 dcam560 = []
 docsrs = []
 # uses the older API specifically for the DCAM560 model
-default = ["dcam560"]
-
-# recreates the bindings for vzense-sys
-run-bindgen = ["vzense-sys/run-bindgen"]
-
-# prevent running build.rs for docs.rs
-[package.metadata.docs.rs]
-features = ["docsrs"]
-
-[profile.dev]
-rpath = true
-
-[profile.release]
-rpath = true
+# default = ["dcam560"]

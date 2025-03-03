@@ -1,12 +1,16 @@
 # Vzense ToF Camera Bindings for Rust
 
-This library provides high-level bindings to connect to and read data from [Vzense](https://www.vzense.com) Time of Flight (ToF) Cameras. The underlying low-level FFI crate `vzense-sys` was created with [bindgen](https://docs.rs/bindgen/latest/bindgen).
+This library provides high-level bindings to connect to and read data from [Vzense](https://www.vzense.com) Time of Flight (ToF) Cameras. The underlying low-level FFI crate is `vzense-sys`.
 
-## OS support
+### Architecture support
 
-Currently only Linux is supported (for MacOS, Vzense unfortunately does not provide drivers). The library is based on the [Scepter SDK](https://github.com/ScepterSW/ScepterSDK) and [Vzense SDK](https://github.com/Vzense/Vzense_SDK_Linux) repositories and was tested on Debian 12.8, but should also work on other distros based on it, like Ubuntu. Support for other platforms (e.g., AArch64) is possible using the respective headers and libraries from the repositories and rebuilding the bindings (support can be added upon request).
+Support for `x86_64` and `aarch64` is provided.
 
-## Camera support
+### OS support
+
+Currently only Linux is supported (for MacOS, Vzense unfortunately does not provide drivers). The library is based on the [Scepter SDK](https://github.com/ScepterSW/ScepterSDK) and [Vzense SDK](https://github.com/Vzense/Vzense_SDK_Linux) repositories. Tested for Debian 12.8 on x86-64 and [Asahi Linux](https://asahilinux.org/) on aarch64 (Apple M2).
+
+### Camera support
 
 The `scepter` module supports [NYX650/660](https://industry.goermicro.com/product/nyx-series), DS86/87, DS77C, and DS77 cameras. (Only NYX650 has been tested so far.)
 
@@ -16,13 +20,13 @@ The `dcam560` module is specifically for the Vzense DCAM560 camera but other mod
 
 The `scepter` module is used by default. To use the `dcam560` module, set `default = ["dcam560"]` under `[features]` in Cargo.toml.
 
-The [basic](examples/basic.rs) example covers all the functionality provided by the library and can be run with `cargo run --example basic`. To stream with maximum frame rate add `--release`.
+The [basic](examples/basic.rs) example covers all the functionality provided by the library and can be run with `cargo run --example basic`. To stream with maximum frame rate add `--release`. For the example, the [`show-image`](https://docs.rs/show-image/latest/show_image) crate is used as a dev-dependency to display data.  
 
-The [`show-image`](https://docs.rs/show-image/latest/show_image) crate is used to display data.  
+For a standalone binary to find links (stored in `<projectDir>/target/<buildType>/deps/`) to the shared libraries, one can use for example [chrpath](https://linux.die.net/man/1/chrpath) but should make sure that `rpath = true` is set under `[profile.<buildType>]` in Cargo.toml.
 
-For a standalone binary to find links (stored in `<projectDir>/target/<buildType>/deps/`) to the shared dynamic libraries, one can use for example [chrpath](https://linux.die.net/man/1/chrpath) to set the rpath accordingly after the build with `chrpath -r <projectDir>/target/<buildType>/deps/ <binary>`.
+### Issues
 
-**Note**: There is an issue that data for the "color mapped to depth frame" is not available for the NYX650 camera if running with `--release`. Please see [here](https://users.rust-lang.org/t/raw-pointer-contains-no-data-when-running-in-release/122814/16) for details.
+There is an issue that data for the "color mapped to depth frame" is not available for the NYX650 camera if running with `--release`. Please see [here](https://users.rust-lang.org/t/raw-pointer-contains-no-data-when-running-in-release/122814/16) for details.
 
 ## License
 

@@ -1,6 +1,9 @@
 //! Reading frames, retrieving data.
 
-use crate::util::{new_fixed_vec, normalize_u16_to_u8};
+use crate::{
+    red,
+    util::{new_fixed_vec, normalize_u16_to_u8},
+};
 
 use super::{device::Device, get_message};
 use std::iter::zip;
@@ -13,8 +16,11 @@ pub fn read_next_frame(device: &mut Device, max_wait_time_ms: u16) -> i32 {
         let status = sys::scGetFrameReady(device.handle, max_wait_time_ms, &mut device.frame_ready);
         if status != OK {
             println!(
-                "\x1b[31mvzense_rust: read_next_frame failed with status {}\x1b[0m",
-                get_message(status)
+                "{}",
+                red!(
+                    "vzense_rust: read_next_frame failed with status {}",
+                    get_message(status)
+                )
             );
             return status;
         }
@@ -123,9 +129,12 @@ fn get_u8_data(device: &Device, data: &mut [u8]) {
 /// Check status of `scGetFrame()` and if data pointer is null.
 fn check_frame(device: &Device, status: sys::ScStatus) {
     if status != OK {
-        panic!("get_frame failed with status {}", get_message(status));
+        panic!(
+            "{}",
+            red!("get_frame failed with status {}", get_message(status))
+        );
     }
     if device.frame.pFrameData.is_null() {
-        panic!("frame pointer is NULL!");
+        panic!("{}", red!("frame pointer is NULL!"));
     }
 }

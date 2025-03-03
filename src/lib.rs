@@ -62,3 +62,22 @@ pub enum DepthMeasuringRange {
     Mid,
     Far,
 }
+
+/// red format!
+#[macro_export]
+#[doc(hidden)]
+macro_rules! red {
+    ($($arg:tt)*) => {format!("\x1b[31m{}\x1b[0m", format_args!($($arg)*))}
+}
+/// yellow format!
+#[macro_export]
+#[doc(hidden)]
+macro_rules! yellow {
+    ($($arg:tt)*) => {format!("\x1b[33m{}\x1b[0m", format_args!($($arg)*))}
+}
+/// cyan format!
+#[macro_export]
+#[doc(hidden)]
+macro_rules! cyan {
+    ($($arg:tt)*) => {format!("\x1b[36m{}\x1b[0m", format_args!($($arg)*))}
+}

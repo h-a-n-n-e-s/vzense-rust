@@ -30,4 +30,4 @@ All rights reserved.
 Copyright (c) 2022, Vzense Technology
 All rights reserved.
 
-Source code and binaries by Scepter Software and Vzense Technology are used under the BSD-3-Clause License. See the license files in directories vzense-lib and vzense-sys for more details.
+Source code and binaries by Scepter Software and Vzense Technology are used under the BSD-3-Clause License. See the license files in directories lib and vzense-sys for more details.

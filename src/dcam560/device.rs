@@ -5,11 +5,11 @@ use std::{ffi::CStr, os::raw::c_char, thread::sleep, time::Duration};
 use sys::PsReturnStatus_PsRetOK as OK;
 use vzense_sys::dcam560 as sys;
 
-use crate::{ColorFormat, ColorResolution, DepthMeasuringRange, Resolution};
+use crate::{ColorFormat, ColorResolution, DepthMeasuringRange, Resolution, cyan, red, yellow};
 
 use super::SESSION_INDEX;
 
-/// A wrapper for the raw pointer `handle` used in every `vzense_sys` call. It also includes `frame_ready` (containing frame availability data) and `frame` (containing a pointer to the actual frame data).
+/// The main interface to the camera.
 pub struct Device {
     pub(super) handle: sys::PsDeviceHandle,
     pub(super) frame_ready: sys::PsFrameReady,
@@ -32,8 +32,8 @@ impl Device {
         if verbose {
             let info = device.get_device_info(device_count)?;
             println!(
-                "\x1b[36mmodel: {}, IP: {}, firmware: {}\x1b[0m",
-                info[0], info[1], info[2]
+                "{}",
+                cyan!("model: {}, IP: {}, firmware: {}", info[0], info[1], info[2])
             );
         }
 
@@ -60,10 +60,7 @@ impl Device {
         let w = self.frame.width as usize;
         let h = self.frame.height as usize;
         if w * h != pixel_count {
-            println!(
-                "\x1b[31m!!! pixel count is not equal to {} * {}\x1b[0m",
-                w, h
-            )
+            println!("{}", red!("!!! pixel count is not equal to {} * {}", w, h))
         }
     }
 
@@ -105,7 +102,10 @@ impl Device {
     pub fn set_color_resolution(&mut self, resolution: ColorResolution) -> Resolution {
         if self.color_is_mapped {
             println!(
-                "\x1b[33msetting of color resolution is ignored because color frame is mapped to depth\x1b[0m"
+                "{}",
+                yellow!(
+                    "setting of color resolution is ignored because color frame is mapped to depth"
+                )
             );
         } else {
             let res = match resolution {
@@ -131,7 +131,7 @@ impl Device {
             2 => Resolution::new(640, 480),
             5 => Resolution::new(800, 600),
             4 => Resolution::new(1600, 1200),
-            _ => panic!("\x1b[31munknown rgb resolution\x1b[0m"),
+            _ => panic!("{}", red!("unknown rgb resolution")),
         }
     }
 
@@ -165,7 +165,7 @@ impl Device {
             0 => (mr.effectDepthMinNear, mr.effectDepthMaxNear),
             1 => (mr.effectDepthMinMid, mr.effectDepthMaxMid),
             2 => (mr.effectDepthMinFar, mr.effectDepthMaxFar),
-            _ => panic!("\x1b[31munknown measuring range\x1b[0m"),
+            _ => panic!("{}", red!("unknown measuring range")),
         }
     }
 
@@ -181,10 +181,7 @@ impl Device {
         let mut data_mode = sys::PsDataMode::default();
         let status = unsafe { sys::Ps2_GetDataMode(self.handle, SESSION_INDEX, &mut data_mode) };
         if status != OK {
-            return Err(format!(
-                "\x1b[31mget data mode failed with status {}\x1b[0m",
-                status
-            ));
+            return Err(red!("get data mode failed with status {}", status));
         }
         Ok(data_mode)
     }
@@ -197,7 +194,7 @@ impl Device {
 
             let status = sys::Ps2_Shutdown();
             if status != OK {
-                println!("\x1b[31mshut down failed with status: {}\x1b[0m", status);
+                println!("{}", red!("shut down failed with status: {}", status));
             } else if verbose {
                 println!("shut down device successfully");
             }
@@ -207,7 +204,7 @@ impl Device {
     /// Returns device info as an array of Strings: \[model, IP, firmware, serial number\]
     pub fn get_device_info(&self, device_count: u32) -> Result<[String; 4], String> {
         if device_count == 0 {
-            return Err("\x1b[31mno device to get info for\x1b[0m".to_string());
+            return Err(red!("no device to get info for"));
         }
 
         let mut device_info = sys::PsDeviceInfo::default();
@@ -220,7 +217,7 @@ impl Device {
 
         let firmware = self
             .get_firmware_version()
-            .expect("\x1b[31mCannot get firmware version\x1b[0m");
+            .expect(&red!("Cannot get firmware version"));
 
         Ok([
             unsafe { CStr::from_ptr(uri) }
@@ -254,10 +251,7 @@ impl Device {
         let mut handle = 0 as sys::PsDeviceHandle;
         let status = unsafe { sys::Ps2_OpenDeviceByIP(ip, &mut handle) };
         if status != OK {
-            return Err(format!(
-                "\x1b[31mopen device failed with status {}\x1b[0m",
-                status
-            ));
+            return Err(red!("open device failed with status {}", status));
         }
         if !handle.is_null() {
             Ok(Device {
@@ -271,17 +265,14 @@ impl Device {
                 max_depth_mm: 1000, // default value
             })
         } else {
-            Err("\x1b[31mdevice ptr is null\x1b[0m".to_string())
+            Err(red!("device ptr is null"))
         }
     }
 
     fn start_stream(&self, verbose: bool) -> Result<(), String> {
         let status = unsafe { sys::Ps2_StartStream(self.handle, SESSION_INDEX) };
         if status != OK {
-            return Err(format!(
-                "\x1b[31mstart stream failed with status {}\x1b[0m",
-                status
-            ));
+            return Err(red!("start stream failed with status {}", status));
         }
         if verbose {
             println!("stream started")
@@ -332,10 +323,7 @@ fn initialize(verbose: bool) -> Result<(), String> {
             println!("reinitializing...");
         }
     } else if status != OK {
-        return Err(format!(
-            "\x1b[31minitialization failed with status {}\x1b[0m",
-            status
-        ));
+        return Err(red!("initialization failed with status {}", status));
     }
     Ok(())
 }
@@ -344,7 +332,8 @@ fn initialize(verbose: bool) -> Result<(), String> {
 fn get_device_count(scan_time: Duration, verbose: bool) -> Result<u32, String> {
     if scan_time < Duration::from_secs(1) {
         println!(
-            "\x1b[33mvzense-rust warning: scan time might be too short to detect a device\x1b[0m"
+            "{}",
+            yellow!("vzense-rust warning: scan time might be too short to detect a device")
         );
     }
     let sleep_interval = Duration::from_millis(200);
@@ -360,20 +349,17 @@ fn get_device_count(scan_time: Duration, verbose: bool) -> Result<u32, String> {
         status = unsafe { sys::Ps2_GetDeviceCount(&mut device_count) };
 
         if status != OK {
-            return Err(format!(
-                "\x1b[31mget device count failed with status {}\x1b[0m",
-                status
-            ));
+            return Err(red!("get device count failed with status {}", status));
         } else {
             if device_count > 0 {
                 if verbose {
-                    println!("\x1b[36mdevice found, \x1b[0m");
+                    println!("{}", cyan!("device found"));
                 }
                 break;
             }
             times_tried += 1;
             if times_tried >= try_count {
-                return Err("\x1b[31mno device found\x1b[0m".to_string());
+                return Err(red!("no device found"));
             }
             sleep(sleep_interval);
         }
@@ -386,10 +372,7 @@ fn get_ip(device_count: u32) -> Result<*const c_char, String> {
     unsafe {
         let status = sys::Ps2_GetDeviceListInfo(&mut device_info, device_count);
         if status != OK {
-            return Err(format!(
-                "\x1b[31mget device list info failed with status {}\x1b[0m",
-                status
-            ));
+            return Err(red!("get device list info failed with status {}", status));
         }
     }
     Ok(device_info.ip.as_ptr())

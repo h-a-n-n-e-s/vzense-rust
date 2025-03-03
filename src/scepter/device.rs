@@ -6,11 +6,11 @@ use sys::ScStatus_SC_OK as OK;
 
 use vzense_sys::scepter as sys;
 
-use crate::{ColorFormat, ColorResolution, Resolution};
+use crate::{ColorFormat, ColorResolution, Resolution, cyan, red, yellow};
 
 use super::get_message;
 
-/// A wrapper for the raw pointer `handle` used in every `vzense_sys` call. It also includes `frame_ready` (containing frame availability data) and `frame` (containing a pointer to the actual frame data).
+/// The main interface to the camera.
 pub struct Device {
     pub(super) handle: sys::ScDeviceHandle,
     pub(super) frame_ready: sys::ScFrameReady,
@@ -33,8 +33,8 @@ impl Device {
         if verbose {
             let info = device.get_device_info(device_count)?;
             println!(
-                "\x1b[36mmodel: {}, IP: {}, firmware: {}\x1b[0m",
-                info[0], info[1], info[2]
+                "{}",
+                cyan!("model: {}, IP: {}, firmware: {}", info[0], info[1], info[2])
             );
         }
 
@@ -61,10 +61,7 @@ impl Device {
         let w = self.frame.width as usize;
         let h = self.frame.height as usize;
         if w * h != pixel_count {
-            println!(
-                "\x1b[31m!!! pixel count is not equal to {} * {}\x1b[0m",
-                w, h
-            )
+            println!("{}", red!("!!! pixel count is not equal to {} * {}", w, h))
         }
     }
 
@@ -103,7 +100,10 @@ impl Device {
     pub fn set_color_resolution(&mut self, resolution: ColorResolution) -> Resolution {
         if self.color_is_mapped {
             println!(
-                "\x1b[33msetting of color resolution is ignored because color frame is mapped to depth\x1b[0m"
+                "{}",
+                yellow!(
+                    "setting of color resolution is ignored because color frame is mapped to depth"
+                )
             );
         } else {
             unsafe {
@@ -130,26 +130,12 @@ impl Device {
         Resolution::new(w as u32, h as u32)
     }
 
-    /// Returns the current depth measuring range `(min, max)` of the camera in mm. **Note**: At least the min value seems to have no practical meaning. For the NYX650 the returned min value is 1 mm which makes no sense, while the max value is 4700 mm. In the specs the depth range for the NYX650 is given as min: 300 mm, max: 4500 mm.
-    #[deprecated]
-    pub fn get_depth_measuring_range(&self) -> (u16, u16) {
-        unsafe {
-            let mut min = 0;
-            let mut max = 0;
-            sys::scGetDepthRangeValue(self.handle, &mut min, &mut max);
-            (min as u16, max as u16)
-        }
-    }
-
     /// Current work mode.
     pub fn get_work_mode(&self) -> Result<u32, String> {
         let mut work_mode = sys::ScWorkMode::default();
         let status = unsafe { sys::scGetWorkMode(self.handle, &mut work_mode) };
         if status != OK {
-            return Err(format!(
-                "\x1b[31mget work mode failed with status {}\x1b[0m",
-                status
-            ));
+            return Err(red!("get work mode failed with status {}", status));
         }
         Ok(work_mode)
     }
@@ -163,8 +149,8 @@ impl Device {
             let status = sys::scShutdown();
             if status != OK {
                 println!(
-                    "\x1b[31mshut down failed with status: {}\x1b[0m",
-                    get_message(status)
+                    "{}",
+                    red!("shut down failed with status: {}", get_message(status))
                 );
             } else if verbose {
                 println!("shut down device successfully");
@@ -175,7 +161,7 @@ impl Device {
     /// Returns device info as an array of Strings: \[model, IP, firmware, serial number\]
     pub fn get_device_info(&self, device_count: u32) -> Result<[String; 4], String> {
         if device_count == 0 {
-            return Err("\x1b[31mno device to get info for\x1b[0m".to_string());
+            return Err(red!("no device to get info for"));
         }
 
         let mut device_info = sys::ScDeviceInfo::default();
@@ -188,7 +174,7 @@ impl Device {
 
         let firmware = self
             .get_firmware_version()
-            .expect("\x1b[31mCannot get firmware version\x1b[0m");
+            .expect(&red!("cannot get firmware version"));
 
         Ok([
             unsafe { CStr::from_ptr(model) }
@@ -219,8 +205,8 @@ impl Device {
         let mut handle = 0 as sys::ScDeviceHandle;
         let status = unsafe { sys::scOpenDeviceByIP(ip, &mut handle) };
         if status != OK {
-            return Err(format!(
-                "\x1b[31mopen device failed with status {}\x1b[0m",
+            return Err(red!(
+                "open device failed with status {}",
                 get_message(status)
             ));
         }
@@ -236,22 +222,30 @@ impl Device {
                 max_depth_mm: 1000, // default value
             })
         } else {
-            Err("\x1b[31mdevice ptr is null\x1b[0m".to_string())
+            Err(red!("device ptr is null"))
         }
     }
 
     fn start_stream(&self, verbose: bool) -> Result<(), String> {
         let status = unsafe { sys::scStartStream(self.handle) };
         if status != OK {
-            return Err(format!(
-                "\x1b[31mstart stream failed with status {}\x1b[0m",
-                status
-            ));
+            return Err(red!("start stream failed with status {}", status));
         }
         if verbose {
             println!("stream started")
         }
         Ok(())
+    }
+
+    /// Returns the current depth measuring range `(min, max)` of the camera in mm. **Note**: At least the min value seems to have no practical meaning. For the NYX650 the returned min value is 1 mm which makes no sense, while the max value is 4700 mm. In the specs the depth range for the NYX650 is given as min: 300 mm, max: 4500 mm.
+    #[deprecated]
+    pub fn get_depth_measuring_range(&self) -> (u16, u16) {
+        unsafe {
+            let mut min = 0;
+            let mut max = 0;
+            sys::scGetDepthRangeValue(self.handle, &mut min, &mut max);
+            (min as u16, max as u16)
+        }
     }
 
     #[deprecated(since = "0.3.0", note = "Use initialize(scan_time, verbose) instead.")]
@@ -297,10 +291,7 @@ fn initialize(verbose: bool) -> Result<(), String> {
             println!("reinitializing...");
         }
     } else if status != OK {
-        return Err(format!(
-            "\x1b[31minitialization failed with status {}\x1b[0m",
-            status
-        ));
+        return Err(red!("initialization failed with status {}", status));
     }
     Ok(())
 }
@@ -309,7 +300,8 @@ fn initialize(verbose: bool) -> Result<(), String> {
 fn get_device_count(scan_time: Duration, verbose: bool) -> Result<u32, String> {
     if scan_time < Duration::from_secs(1) {
         println!(
-            "\x1b[33mvzense-rust warning: scan time might be too short to detect a device\x1b[0m"
+            "{}",
+            yellow!("vzense-rust warning: scan time might be too short to detect a device")
         );
     }
     let scan_interval = Duration::from_millis(200);
@@ -325,20 +317,17 @@ fn get_device_count(scan_time: Duration, verbose: bool) -> Result<u32, String> {
         status = unsafe { sys::scGetDeviceCount(&mut device_count, 200) };
 
         if status != OK {
-            return Err(format!(
-                "\x1b[31mget device count failed with status {}\x1b[0m",
-                status
-            ));
+            return Err(red!("get device count failed with status {}", status));
         } else {
             if device_count > 0 {
                 if verbose {
-                    println!("\x1b[36mdevice found, \x1b[0m");
+                    println!("{}", cyan!("device found"));
                 }
                 break;
             }
             times_tried += 1;
             if times_tried >= try_count {
-                return Err("\x1b[31mno device found\x1b[0m".to_string());
+                return Err(red!("no device found"));
             }
         }
     }
@@ -350,10 +339,7 @@ fn get_ip(device_count: u32) -> Result<*const c_char, String> {
     unsafe {
         let status = sys::scGetDeviceInfoList(device_count, &mut device_info);
         if status != OK {
-            return Err(format!(
-                "\x1b[31mget device list info failed with status {}\x1b[0m",
-                status
-            ));
+            return Err(red!("get device list info failed with status {}", status));
         }
     }
     Ok(device_info.ip.as_ptr())

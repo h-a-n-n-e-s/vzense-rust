@@ -1,5 +1,6 @@
 //! Reading frames, retrieving data.
 
+use crate::red;
 use crate::util::{new_fixed_vec, normalize_u16_to_u8};
 
 use super::SESSION_INDEX;
@@ -15,8 +16,8 @@ pub fn read_next_frame(device: &mut Device) -> i32 {
         let status = sys::Ps2_ReadNextFrame(device.handle, SESSION_INDEX, &mut device.frame_ready);
         if status != OK {
             println!(
-                "\x1b[31mvzense_rust: read_next_frame failed with status {}\x1b[0m",
-                status
+                "{}",
+                red!("vzense_rust: read_next_frame failed with status {}", status)
             );
             return status;
         }
@@ -146,9 +147,9 @@ fn get_color(device: &Device, color: &mut [u8]) {
 
 fn check_frame(device: &Device, status: sys::PsReturnStatus) {
     if status != OK {
-        panic!("\x1b[31mget_frame failed with status {}\x1b[0m", status);
+        panic!("{}", red!("get_frame failed with status {}", status));
     }
     if device.frame.pFrameData.is_null() {
-        panic!("\x1b[31mframe pointer is NULL!\x1b[0m");
+        panic!("{}", red!("frame pointer is NULL!"));
     }
 }
