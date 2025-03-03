@@ -15,7 +15,7 @@ authors = ["Johannes Schoenke"]
 features = ["docsrs"]
 
 [dependencies]
-vzense-sys = { path = "vzense-sys" }
+vzense-sys = { version = "0.3.0", path = "vzense-sys"}
 
 [dev-dependencies]
 show-image = "0.14.1"
