@@ -51,6 +51,38 @@ impl Device {
         self.max_depth_mm = max_depth_mm;
     }
 
+    /// Get the current frame rate of the camera.
+    pub fn get_frame_rate(&self) -> Result<u8, String> {
+        let mut rate = 0;
+        let status = unsafe { sys::scGetFrameRate(self.handle, &mut rate) };
+        if status != OK {
+            return Err(red!(
+                "get frame rate failed with status {}",
+                get_message(status)
+            ));
+        }
+        Ok(rate as u8)
+    }
+
+    /// Set the ToF frame rate. The interface takes a long time, about 500 ms. Different devices have different maximum values. Please refer to the device specification.
+    pub fn set_frame_rate(&self, rate: u8) -> Result<(), String> {
+        let status = unsafe { sys::scSetFrameRate(self.handle, rate as i32) };
+        if status != OK {
+            if status == -105 {
+                println!(
+                    "{}",
+                    yellow!("Frame rate is probably set above the maximum possible value.")
+                );
+            }
+            return Err(red!(
+                "set frame rate failed with status {} {}",
+                get_message(status),
+                status
+            ));
+        }
+        Ok(())
+    }
+
     /// Get frame info like frame type, pixel format, width, height, etc.
     pub fn get_frame_info(&self) -> String {
         format!("{:?}", self.frame)
@@ -135,7 +167,10 @@ impl Device {
         let mut work_mode = sys::ScWorkMode::default();
         let status = unsafe { sys::scGetWorkMode(self.handle, &mut work_mode) };
         if status != OK {
-            return Err(red!("get work mode failed with status {}", status));
+            return Err(red!(
+                "get work mode failed with status {}",
+                get_message(status)
+            ));
         }
         Ok(work_mode)
     }
@@ -229,7 +264,10 @@ impl Device {
     fn start_stream(&self, verbose: bool) -> Result<(), String> {
         let status = unsafe { sys::scStartStream(self.handle) };
         if status != OK {
-            return Err(red!("start stream failed with status {}", status));
+            return Err(red!(
+                "start stream failed with status {}",
+                get_message(status)
+            ));
         }
         if verbose {
             println!("stream started")
@@ -291,7 +329,10 @@ fn initialize(verbose: bool) -> Result<(), String> {
             println!("reinitializing...");
         }
     } else if status != OK {
-        return Err(red!("initialization failed with status {}", status));
+        return Err(red!(
+            "initialization failed with status {}",
+            get_message(status)
+        ));
     }
     Ok(())
 }
@@ -317,7 +358,10 @@ fn get_device_count(scan_time: Duration, verbose: bool) -> Result<u32, String> {
         status = unsafe { sys::scGetDeviceCount(&mut device_count, 200) };
 
         if status != OK {
-            return Err(red!("get device count failed with status {}", status));
+            return Err(red!(
+                "get device count failed with status {}",
+                get_message(status)
+            ));
         } else {
             if device_count > 0 {
                 if verbose {
@@ -339,7 +383,10 @@ fn get_ip(device_count: u32) -> Result<*const c_char, String> {
     unsafe {
         let status = sys::scGetDeviceInfoList(device_count, &mut device_info);
         if status != OK {
-            return Err(red!("get device list info failed with status {}", status));
+            return Err(red!(
+                "get device list info failed with status {}",
+                get_message(status)
+            ));
         }
     }
     Ok(device_info.ip.as_ptr())

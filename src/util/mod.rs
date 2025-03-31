@@ -76,7 +76,7 @@ impl Counter {
             let elapsed = self.now.elapsed().as_secs_f64();
             self.now = Instant::now();
             return Some(format!(
-                "  fps: {:.1}  frame: {}\r",
+                "  fps: {:.1}    frame: {}",
                 self.info_interval as f64 / elapsed,
                 self.count
             ));

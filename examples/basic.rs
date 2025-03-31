@@ -36,6 +36,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
+    // The frame rate should not be set above the maximum value for the camera
+    device.set_frame_rate(30)?;
+    println!("frame rate: {} fps", device.get_frame_rate()?);
+
     // Choose the depth measuring range for DCAM560 (Near, Mid, or Far).
     #[cfg(feature = "dcam560")]
     {
@@ -93,7 +97,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Scepter API has an additional `max_wait_time_ms` paramter.
         #[cfg(not(feature = "dcam560"))]
-        read_next_frame(&mut device, 100);
+        read_next_frame(&mut device, 500);
 
         #[cfg(feature = "dcam560")]
         read_next_frame(&mut device);
@@ -156,7 +160,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-// helper functions using the show_image crate ________________________________
+///////////////////////////////////////////////////////////////////////////////
+// helper functions to show video images using show-image crate ///////////////
 
 /// Image formats.
 pub enum Format {

@@ -50,6 +50,25 @@ impl Device {
         self.max_depth_mm = max_depth_mm;
     }
 
+    /// Get the current frame rate of the camera.
+    pub fn get_frame_rate(&self) -> Result<u8, String> {
+        let mut rate = 0;
+        let status = unsafe { sys::Ps2_GetTofFrameRate(self.handle, SESSION_INDEX, &mut rate) };
+        if status != OK {
+            return Err(red!("get frame rate failed with status {}", status));
+        }
+        Ok(rate)
+    }
+
+    /// Set the ToF frame rate. Different devices have different maximum values. Please refer to the device specification.
+    pub fn set_frame_rate(&self, rate: u8) -> Result<(), String> {
+        let status = unsafe { sys::Ps2_SetTofFrameRate(self.handle, SESSION_INDEX, rate) };
+        if status != OK {
+            return Err(red!("set frame rate failed with status {}", status));
+        }
+        Ok(())
+    }
+
     /// Get frame info like frame type, pixel format, width, height, etc.
     pub fn get_frame_info(&self) -> String {
         format!("{:?}", self.frame)

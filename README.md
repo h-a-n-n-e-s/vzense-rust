@@ -20,9 +20,9 @@ The `dcam560` module is specifically for the Vzense DCAM560 camera but other mod
 
 The `scepter` module is used by default. To use the `dcam560` module, set `default = ["dcam560"]` under `[features]` in Cargo.toml.
 
-The [basic](examples/basic.rs) example covers all the functionality provided by the library and can be run with `cargo run --example basic`. To stream with maximum frame rate add `--release`. For the example, the [`show-image`](https://docs.rs/show-image/latest/show_image) crate is used as a dev-dependency to display data.  
+The [basic](examples/basic.rs) example covers all the functionality provided by the library and can be run with `cargo run --example basic`. To stream with maximum frame rate add `--release`. For the example, the [`show-image`](https://docs.rs/show-image/latest/show_image) crate is used as a dev-dependency to display data.
 
-For a standalone binary to find links (stored in `<projectDir>/target/<buildType>/deps/`) to the shared libraries, one can use for example [chrpath](https://linux.die.net/man/1/chrpath) but should make sure that `rpath = true` is set under `[profile.<buildType>]` in Cargo.toml.
+For a standalone binary to find links (stored in `<projectDir>/target/<buildType>/deps/`) to the shared libraries, one can add that path to `LD_LIBRARY_PATH`. Or use [chrpath](https://linux.die.net/man/1/chrpath) but make sure that `rpath = true` is set under `[profile.<buildType>]` in Cargo.toml.
 
 ### Issues
 
